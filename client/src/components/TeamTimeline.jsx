@@ -5,7 +5,7 @@ import { format, addDays, differenceInDays, isWithinInterval, parseISO, startOfD
 const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
 
 function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
-  const [hoveredTask, setHoveredTask] = useState(null);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
 
   if (loading) {
@@ -48,12 +48,16 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     sprintDays = 14;
   }
 
-  // Generate array of dates for the timeline
+  // Generate array of dates for the timeline (excluding weekends)
   const timelineDates = useMemo(() => {
     try {
       const dates = [];
       for (let i = 0; i < sprintDays; i++) {
-        dates.push(addDays(sprintStart, i));
+        const date = addDays(sprintStart, i);
+        // Skip weekends (Saturday = 6, Sunday = 0)
+        if (date.getDay() !== 0 && date.getDay() !== 6) {
+          dates.push(date);
+        }
       }
       return dates;
     } catch (err) {
@@ -69,44 +73,66 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
       return members.map(member => {
         const assignedIssues = member?.work?.assignedIssues || [];
         const tasks = assignedIssues.map(issue => {
-          // Use due date as end, and estimate start based on estimate
-          // Note: backend sends 'dueDate' (we added it), check both cases
+          // Parse dates from issue
           let dueDate = null;
+          let issueStartDate = null;
           const dueDateStr = issue.dueDate || issue.duedate;
+          const startDateStr = issue.startDate; // Start date field from Jira
+          
           try {
             dueDate = dueDateStr ? startOfDay(parseISO(dueDateStr)) : null;
           } catch (e) {
             dueDate = null;
           }
           
+          try {
+            issueStartDate = startDateStr ? startOfDay(parseISO(startDateStr)) : null;
+          } catch (e) {
+            issueStartDate = null;
+          }
+          
           const estimateHours = issue.originalEstimate || 8;
           const estimateDays = Math.max(1, Math.ceil(estimateHours / 8));
         
-          // Calculate start date: if due date exists, work backwards from due date
-          // Otherwise, distribute tasks across the sprint based on their index
-          let startDate, endDate;
-          if (dueDate) {
-            endDate = dueDate;
-            startDate = addDays(dueDate, -estimateDays + 1);
-            // Ensure start is not before sprint start
-            if (startDate < sprintStart) {
-              startDate = sprintStart;
+          // Calculate start and end dates:
+          // Priority: Use issue's start date if available, due date as end
+          // If only due date: work backwards from due date based on estimate
+          // If only start date: work forwards from start based on estimate
+          // If neither: place at sprint start
+          let taskStartDate, taskEndDate;
+          
+          if (issueStartDate && dueDate) {
+            // Both dates available - use them directly
+            taskStartDate = issueStartDate < sprintStart ? sprintStart : issueStartDate;
+            taskEndDate = dueDate > sprintEnd ? sprintEnd : dueDate;
+            // Ensure start is not after end
+            if (taskStartDate > taskEndDate) {
+              taskStartDate = taskEndDate;
             }
-            // Ensure end is not after sprint end
-            if (endDate > sprintEnd) {
-              endDate = sprintEnd;
+          } else if (dueDate) {
+            // Only due date - work backwards from due date
+            taskEndDate = dueDate > sprintEnd ? sprintEnd : dueDate;
+            taskStartDate = addDays(taskEndDate, -estimateDays + 1);
+            if (taskStartDate < sprintStart) {
+              taskStartDate = sprintStart;
+            }
+          } else if (issueStartDate) {
+            // Only start date - work forwards from start based on estimate
+            taskStartDate = issueStartDate < sprintStart ? sprintStart : issueStartDate;
+            taskEndDate = addDays(taskStartDate, estimateDays - 1);
+            if (taskEndDate > sprintEnd) {
+              taskEndDate = sprintEnd;
             }
           } else {
-            // No due date - spread tasks across sprint based on estimate
-            // Place at sprint start but limit to sprint duration
-            startDate = sprintStart;
-            endDate = addDays(sprintStart, Math.min(estimateDays - 1, sprintDays - 1));
+            // No dates - place at sprint start based on estimate
+            taskStartDate = sprintStart;
+            taskEndDate = addDays(sprintStart, Math.min(estimateDays - 1, sprintDays - 1));
           }
 
           return {
             ...issue,
-            startDate,
-            endDate,
+            startDate: taskStartDate,
+            endDate: taskEndDate,
             estimateDays
           };
         });
@@ -123,103 +149,237 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     }
   }, [members, sprintStart, sprintEnd, sprintDays]);
 
-  // Color palette for tasks
-  const getTaskColor = (issueType, isSubtask) => {
-    if (isSubtask) return 'var(--accent-cyan)';
-    switch (issueType) {
-      case 'Story': return 'var(--accent-green)';
-      case 'Task': return 'var(--accent-blue)';
-      case 'Bug': return 'var(--accent-red)';
-      case 'Technical Task': return 'var(--accent-purple)';
-      default: return 'var(--accent-orange)';
+  // Highly contrasting color palette for tasks - very distinct colors
+  const TASK_COLORS = [
+    '#e11d48', // Rose/Pink
+    '#2563eb', // Blue
+    '#16a34a', // Green
+    '#ea580c', // Orange
+    '#7c3aed', // Purple
+    '#0891b2', // Cyan
+    '#ca8a04', // Yellow/Gold
+    '#dc2626', // Red
+    '#4f46e5', // Indigo
+    '#059669', // Emerald
+    '#d946ef', // Fuchsia
+    '#0284c7', // Sky blue
+    '#65a30d', // Lime
+    '#c026d3', // Pink/Magenta
+    '#0d9488', // Teal
+  ];
+  
+  // Get a consistent color for a task based on its key (hash-based)
+  const getTaskColorByKey = (taskKey) => {
+    let hash = 0;
+    for (let i = 0; i < taskKey.length; i++) {
+      hash = taskKey.charCodeAt(i) + ((hash << 5) - hash);
     }
+    return TASK_COLORS[Math.abs(hash) % TASK_COLORS.length];
   };
 
-  // Check if a task spans a specific date
-  const taskSpansDate = (task, date) => {
-    if (!task.startDate || !task.endDate) return false;
-    return isWithinInterval(startOfDay(date), {
-      start: startOfDay(task.startDate),
-      end: startOfDay(task.endDate)
-    });
+  // Check if a task spans a specific date and return position info
+  const getTaskPositionForDate = (task, date, dateIndex) => {
+    if (!task.startDate || !task.endDate) return null;
+    
+    const dateStart = startOfDay(date);
+    const taskStart = startOfDay(task.startDate);
+    const taskEnd = startOfDay(task.endDate);
+    
+    if (!isWithinInterval(dateStart, { start: taskStart, end: taskEnd })) {
+      return null;
+    }
+    
+    const isFirst = format(dateStart, 'yyyy-MM-dd') === format(taskStart, 'yyyy-MM-dd');
+    const isLast = format(dateStart, 'yyyy-MM-dd') === format(taskEnd, 'yyyy-MM-dd');
+    const isMiddle = !isFirst && !isLast;
+    
+    return { isFirst, isLast, isMiddle };
   };
 
-  // Get tasks for a member on a specific date
-  const getTasksForDate = (tasks, date) => {
-    return tasks.filter(task => taskSpansDate(task, date));
+  // Get tasks for a member on a specific date with position info
+  // Sort by task key to ensure consistent ordering across all days
+  const getTasksForDate = (tasks, date, dateIndex) => {
+    return tasks
+      .map(task => {
+        const position = getTaskPositionForDate(task, date, dateIndex);
+        if (!position) return null;
+        return { ...task, position };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.key.localeCompare(b.key));
+  };
+  
+  // Get all unique tasks for a member (for consistent row ordering)
+  const getAllTasksForMember = (tasks) => {
+    return [...tasks].sort((a, b) => a.key.localeCompare(b.key));
   };
 
-  // Tooltip component
-  const TaskTooltip = ({ task, position }) => {
+  // Modal/Popup component - click to open, click outside to close
+  const TaskPopup = ({ task, onClose }) => {
     if (!task) return null;
 
     return (
-      <div
-        style={{
-          position: 'fixed',
-          left: position.x + 10,
-          top: position.y + 10,
-          backgroundColor: 'var(--bg-primary)',
-          border: '1px solid var(--border-color)',
-          borderRadius: '8px',
-          padding: '12px',
-          zIndex: 1000,
-          maxWidth: '350px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <a 
-            href={getJiraLink(jiraBaseUrl, task.key)} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="issue-key"
-            style={{ fontWeight: '600', fontSize: '14px' }}
-          >
-            {task.key} <ExternalLink size={12} />
-          </a>
-          <span className={`status-badge ${task.issueType === 'Bug' ? 'danger' : 'info'}`} style={{ fontSize: '10px' }}>
-            {task.issueType}
-          </span>
-        </div>
-        <div style={{ fontSize: '13px', marginBottom: '8px', color: 'var(--text-primary)' }}>
-          {task.summary}
-        </div>
-        {task.parentKey && (
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-            Parent: <a href={getJiraLink(jiraBaseUrl, task.parentKey)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>
-              {task.parentKey}
-            </a>
-            {task.parentStoryPoints && <span> ({task.parentStoryPoints} SP)</span>}
+      <>
+        {/* Backdrop */}
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999
+          }}
+          onClick={onClose}
+        />
+        {/* Popup */}
+        <div
+          style={{
+            position: 'fixed',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'var(--bg-primary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '8px',
+            padding: '16px',
+            zIndex: 1000,
+            minWidth: '350px',
+            maxWidth: '450px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <a 
+                href={getJiraLink(jiraBaseUrl, task.key)} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="issue-key"
+                style={{ fontWeight: '600', fontSize: '14px' }}
+              >
+                {task.key} <ExternalLink size={12} />
+              </a>
+              <span className={`status-badge ${task.issueType === 'Bug' ? 'danger' : 'info'}`} style={{ fontSize: '10px' }}>
+                {task.issueType}
+              </span>
+            </div>
+            <button 
+              onClick={onClose}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                cursor: 'pointer', 
+                fontSize: '18px',
+                color: 'var(--text-muted)',
+                padding: '4px'
+              }}
+            >
+              ×
+            </button>
           </div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
-          <div>
-            <span style={{ color: 'var(--text-muted)' }}>Estimate:</span>
-            <span style={{ marginLeft: '4px', fontWeight: '600' }}>
-              {task.originalEstimate ? `${(task.originalEstimate / 8).toFixed(1)}d` : '-'}
-            </span>
+          <div style={{ fontSize: '13px', marginBottom: '12px', color: 'var(--text-primary)' }}>
+            {task.summary}
           </div>
-          <div>
-            <span style={{ color: 'var(--text-muted)' }}>Status:</span>
-            <span className={`status-badge ${task.isCompleted ? 'success' : 'info'}`} style={{ marginLeft: '4px', fontSize: '10px' }}>
-              {task.status}
-            </span>
-          </div>
-          {task.dueDate && (
-            <div>
-              <span style={{ color: 'var(--text-muted)' }}>Due:</span>
-              <span style={{ marginLeft: '4px' }}>{format(parseISO(task.dueDate), 'MMM d')}</span>
+          {task.parentKey && (
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
+              Parent: <a href={getJiraLink(jiraBaseUrl, task.parentKey)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>
+                {task.parentKey}
+              </a>
             </div>
           )}
-          {task.storyPoints && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
             <div>
-              <span style={{ color: 'var(--text-muted)' }}>Story Points:</span>
-              <span style={{ marginLeft: '4px', fontWeight: '600', color: 'var(--accent-purple)' }}>{task.storyPoints}</span>
+              <span style={{ color: 'var(--text-muted)' }}>Estimate:</span>
+              <span style={{ marginLeft: '4px', fontWeight: '600' }}>
+                {task.originalEstimate ? `${(task.originalEstimate / 8).toFixed(1)}d` : '-'}
+              </span>
             </div>
-          )}
+            <div>
+              <span style={{ color: 'var(--text-muted)' }}>Status:</span>
+              <span className={`status-badge ${task.isCompleted ? 'success' : 'info'}`} style={{ marginLeft: '4px', fontSize: '10px' }}>
+                {task.status}
+              </span>
+            </div>
+            {task.dueDate && (
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Due:</span>
+                <span style={{ marginLeft: '4px' }}>{format(parseISO(task.dueDate), 'MMM d')}</span>
+              </div>
+            )}
+            {task.storyPoints && (
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Story Points:</span>
+                <span style={{ marginLeft: '4px', fontWeight: '600', color: 'var(--accent-purple)' }}>{task.storyPoints}</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Time Tracking Section */}
+          <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+            <div style={{ fontSize: '12px', fontWeight: '600', marginBottom: '8px', color: 'var(--text-primary)' }}>
+              Time Tracking
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Logged:</span>
+                <span style={{ marginLeft: '4px', fontWeight: '600', color: 'var(--accent-blue)' }}>
+                  {task.workLogged ? `${(task.workLogged / 8).toFixed(1)}d` : '0d'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Remaining:</span>
+                <span style={{ marginLeft: '4px', fontWeight: '600', color: task.remainingEstimate > 0 ? 'var(--accent-orange)' : 'var(--accent-green)' }}>
+                  {task.remainingEstimate ? `${(task.remainingEstimate / 8).toFixed(1)}d` : '0d'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Total Time:</span>
+                <span style={{ marginLeft: '4px', fontWeight: '600' }}>
+                  {task.timeSpent ? `${(task.timeSpent / 8).toFixed(1)}d` : '-'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-muted)' }}>Original:</span>
+                <span style={{ marginLeft: '4px', fontWeight: '600' }}>
+                  {task.originalEstimate ? `${(task.originalEstimate / 8).toFixed(1)}d` : '-'}
+                </span>
+              </div>
+            </div>
+            
+            {/* Progress Bar */}
+            {(task.workLogged > 0 || task.remainingEstimate > 0) && (
+              <div style={{ marginTop: '8px' }}>
+                <div style={{ 
+                  height: '6px', 
+                  backgroundColor: 'var(--border-color)', 
+                  borderRadius: '3px', 
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${task.originalEstimate > 0 ? Math.min((task.workLogged / task.originalEstimate) * 100, 100) : 0}%`,
+                    backgroundColor: 'var(--accent-blue)',
+                    borderRadius: '3px',
+                    transition: 'width 0.3s ease'
+                  }} />
+                </div>
+                <div style={{ 
+                  fontSize: '9px', 
+                  color: 'var(--text-muted)', 
+                  marginTop: '2px',
+                  display: 'flex',
+                  justifyContent: 'space-between'
+                }}>
+                  <span>{task.workLogged ? `${(task.workLogged / 8).toFixed(1)}d logged` : '0d logged'}</span>
+                  <span>{task.originalEstimate ? `${(task.originalEstimate / 8).toFixed(1)}d total` : '-'}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      </>
     );
   };
 
@@ -264,29 +424,10 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
         </div>
       </div>
 
-      {/* Legend */}
+      {/* Legend - Note about colors */}
       <div className="card mb-4" style={{ padding: '12px' }}>
-        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '11px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-green)' }} />
-            <span>Story</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-blue)' }} />
-            <span>Task</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-purple)' }} />
-            <span>Technical Task</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-red)' }} />
-            <span>Bug</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--accent-cyan)' }} />
-            <span>Subtask</span>
-          </div>
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <strong>Note:</strong> Each ticket has a unique color based on its key. Click on a ticket bar to view details. Bars span from start date to due date.
         </div>
       </div>
 
@@ -308,7 +449,6 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                 Team Member
               </th>
               {timelineDates.map((date, idx) => {
-                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                 const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
                 return (
                   <th 
@@ -319,8 +459,8 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                       minWidth: '40px',
                       textAlign: 'center',
                       fontSize: '10px',
-                      background: isToday ? 'rgba(59, 130, 246, 0.2)' : isWeekend ? 'rgba(0,0,0,0.1)' : 'transparent',
-                      color: isWeekend ? 'var(--text-muted)' : 'var(--text-secondary)'
+                      background: isToday ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                      color: 'var(--text-secondary)'
                     }}
                   >
                     <div>{format(date, 'EEE')}</div>
@@ -349,63 +489,89 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                     <span style={{ fontSize: '13px' }}>{member.displayName}</span>
                   </div>
                 </td>
-                {timelineDates.map((date, idx) => {
-                  const dayTasks = getTasksForDate(tasks, date);
-                  const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-                  const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                {(() => {
+                  // Get all tasks sorted by key for consistent row ordering
+                  const sortedTasks = getAllTasksForMember(tasks);
                   
-                  return (
-                    <td 
-                      key={idx}
-                      style={{ 
-                        padding: '2px',
-                        borderBottom: '1px solid var(--border-color)',
-                        borderLeft: '1px solid var(--border-color)',
-                        verticalAlign: 'top',
-                        background: isToday ? 'rgba(59, 130, 246, 0.1)' : isWeekend ? 'rgba(0,0,0,0.05)' : 'transparent',
-                        minHeight: '40px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        {dayTasks.slice(0, 3).map((task, taskIdx) => (
-                          <div
-                            key={task.key + taskIdx}
-                            onMouseEnter={(e) => setHoveredTask({ task, position: { x: e.clientX, y: e.clientY } })}
-                            onMouseLeave={() => setHoveredTask(null)}
-                            style={{
-                              background: getTaskColor(task.issueType, task.isSubtask),
-                              borderRadius: '3px',
-                              padding: '2px 4px',
-                              fontSize: '9px',
-                              color: 'white',
-                              cursor: 'pointer',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              opacity: task.isCompleted ? 0.6 : 1
-                            }}
-                            title={`${task.key}: ${task.summary}`}
-                          >
-                            {task.key}
-                          </div>
-                        ))}
-                        {dayTasks.length > 3 && (
-                          <div style={{ fontSize: '9px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                            +{dayTasks.length - 3}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
+                  return timelineDates.map((date, idx) => {
+                    const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                    
+                    return (
+                      <td 
+                        key={idx}
+                        style={{ 
+                          padding: '2px 0',
+                          borderBottom: '1px solid var(--border-color)',
+                          borderLeft: '1px solid var(--border-color)',
+                          verticalAlign: 'top',
+                          background: isToday ? 'rgba(59, 130, 246, 0.1)' : 'transparent',
+                          minHeight: '40px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          {sortedTasks.map((task, taskIdx) => {
+                            const position = getTaskPositionForDate(task, date, idx);
+                            const taskColor = getTaskColorByKey(task.key);
+                            
+                            // If task is not active on this day, render empty placeholder
+                            if (!position) {
+                              return (
+                                <div
+                                  key={task.key + taskIdx}
+                                  style={{
+                                    minHeight: '18px',
+                                    padding: '3px 4px',
+                                  }}
+                                />
+                              );
+                            }
+                            
+                            const { isFirst, isLast } = position;
+                            
+                            return (
+                              <div
+                                key={task.key + taskIdx}
+                                onClick={() => setSelectedTask(task)}
+                                style={{
+                                  background: taskColor,
+                                  borderRadius: isFirst && isLast ? '4px' : isFirst ? '4px 0 0 4px' : isLast ? '0 4px 4px 0' : '0',
+                                  padding: '3px 4px',
+                                  marginLeft: isFirst ? '2px' : '0',
+                                  marginRight: isLast ? '2px' : '0',
+                                  fontSize: '9px',
+                                  color: 'white',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  opacity: task.isCompleted ? 0.6 : 1,
+                                  textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                                  minHeight: '18px',
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                                title={`${task.key}: ${task.summary}`}
+                              >
+                                {isFirst ? task.key : ''}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </td>
+                    );
+                  });
+                })()}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      {/* Hover Tooltip */}
-      {hoveredTask && <TaskTooltip task={hoveredTask.task} position={hoveredTask.position} />}
+      {/* Task Popup */}
+      {selectedTask && (
+        <TaskPopup task={selectedTask} onClose={() => setSelectedTask(null)} />
+      )}
     </div>
   );
 }

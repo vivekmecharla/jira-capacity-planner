@@ -214,11 +214,12 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
   };
 
   // Sortable header component
-  const SortHeader = ({ label, column, sort, onSort, className = '' }) => (
+  const SortHeader = ({ label, column, sort, onSort, className = '', tooltip = '' }) => (
     <th 
       className={className}
       style={{ cursor: 'pointer', userSelect: 'none' }}
       onClick={() => onSort(column)}
+      title={tooltip}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: className.includes('text-center') ? 'center' : 'flex-start', gap: '4px' }}>
         {label}
@@ -490,13 +491,13 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
           <table className="planning-table">
             <thead>
               <tr>
-                <SortHeader label="Key" column="key" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} />
-                <SortHeader label="Type" column="issueType" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} />
-                <SortHeader label="Summary" column="summary" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} />
-                <SortHeader label="Status" column="status" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} className="text-center" />
-                <SortHeader label="Assignee" column="assignee" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} className="text-center" />
-                <SortHeader label="Due Date" column="dueDate" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} className="text-center" />
-                <th className="text-center">Delay Reason</th>
+                <SortHeader label="Key" column="key" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} tooltip="Jira issue key" />
+                <SortHeader label="Type" column="issueType" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} tooltip="Issue type (Story, Bug, Task, etc.)" />
+                <SortHeader label="Summary" column="summary" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} tooltip="Issue title/description" />
+                <SortHeader label="Status" column="status" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} className="text-center" tooltip="Current workflow status" />
+                <SortHeader label="Assignee" column="assignee" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} className="text-center" tooltip="Team member assigned to this issue" />
+                <SortHeader label="Due Date" column="dueDate" sort={allSort} onSort={(col) => handleSort(allSort, setAllSort, col)} className="text-center" tooltip="Target completion date" />
+                <th className="text-center" title="Days overdue past due date">Delay Reason</th>
               </tr>
             </thead>
             <tbody>

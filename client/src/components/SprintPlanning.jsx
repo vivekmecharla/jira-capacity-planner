@@ -70,6 +70,28 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
   }
 
   const { planning, sprint: sprintInfo } = planningData;
+  
+  // Restrict Sprint Planning for closed sprints
+  if (sprint?.state === 'closed') {
+    return (
+      <div className="card">
+        <div className="empty-state">
+          <div style={{ marginBottom: '16px' }}>
+            <span className="status-badge" style={{ fontSize: '12px', backgroundColor: 'var(--text-muted)', padding: '6px 12px' }}>
+              Sprint Closed
+            </span>
+          </div>
+          <h3 style={{ marginBottom: '8px', color: 'var(--text-primary)' }}>{sprint.name}</h3>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '16px' }}>
+            Sprint Planning is not available for closed sprints.
+          </p>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+            Please use the <strong>Sprint Retro</strong> tab to view historical data for this sprint.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const members = planning?.members || [];
   const totals = planning?.totals || {};
   const holidays = planning?.holidays || [];
@@ -651,12 +673,12 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
             <table className="planning-table">
               <thead>
                 <tr>
-                  <th style={{ width: '200px' }}>Team Member</th>
-                  <th className="text-center">Issues</th>
-                  <th className="text-center">Availability</th>
-                  <th className="text-center">Estimated Hours</th>
-                  <th className="text-center">Remaining</th>
-                  <th style={{ width: '150px' }}>Utilization</th>
+                  <th style={{ width: '200px' }} title="Team member name">Team Member</th>
+                  <th className="text-center" title="Number of issues assigned to this member">Issues</th>
+                  <th className="text-center" title="Available working hours after leaves and holidays, adjusted by role allocation">Availability</th>
+                  <th className="text-center" title="Total committed work = Remaining estimate + Work logged during this sprint (for non-late tickets)">Work Allocated</th>
+                  <th className="text-center" title="Remaining capacity = Availability - Work Allocated. Negative means overcommitted.">Available Bandwidth</th>
+                  <th style={{ width: '150px' }} title="Percentage of availability that is allocated to work">Utilization</th>
                 </tr>
               </thead>
               <tbody>
@@ -743,13 +765,13 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                           )}
                         </td>
                         <td className="text-center">
-                          {item.work.totalEstimatedHours > 0 ? (
+                          {(item.work.totalCommittedHours ?? item.work.totalEstimatedHours) > 0 ? (
                             <div>
                               <span style={{ fontWeight: '600' }}>
-                                {(item.work.totalEstimatedHours / hoursPerDay).toFixed(1)}d
+                                {((item.work.totalCommittedHours ?? item.work.totalEstimatedHours) / hoursPerDay).toFixed(1)}d
                               </span>
                               <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>
-                                ({formatHours(item.work.totalEstimatedHours)})
+                                ({formatHours(item.work.totalCommittedHours ?? item.work.totalEstimatedHours)})
                               </span>
                             </div>
                           ) : '-'}
@@ -784,42 +806,73 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                       </tr>
                       {isExpanded && item.work.assignedIssues.length > 0 && (
                         <tr>
-                          <td colSpan="6" style={{ padding: '0 12px 12px 48px', background: 'var(--bg-secondary)' }}>
-                            <div className="issue-list" style={{ marginTop: '8px' }}>
-                              {item.work.assignedIssues.map(issue => (
-                                <div key={issue.key} className="issue-item">
-                                  <a href={getJiraLink(jiraBaseUrl, issue.key)} target="_blank" rel="noopener noreferrer" className="issue-key" style={{ textDecoration: 'none' }}>
-                                    {issue.key} <ExternalLink size={10} style={{ marginLeft: '2px' }} />
-                                  </a>
-                                  <span className={`status-badge ${issue.issueType === 'Bug' ? 'danger' : 'info'}`} style={{ fontSize: '10px' }}>
-                                    {issue.issueType}
-                                  </span>
-                                  <a href={getJiraLink(jiraBaseUrl, issue.key)} target="_blank" rel="noopener noreferrer" className="issue-summary" style={{ textDecoration: 'none', color: 'inherit' }}>
-                                    {issue.summary}
-                                  </a>
-                                  <span className={`status-badge ${issue.isCompleted ? 'success' : 'info'}`} style={{ fontSize: '10px' }}>
-                                    {issue.status}
-                                  </span>
-                                  {issue.storyPoints && (
-                                    <span style={{ fontSize: '11px', color: 'var(--accent-purple)' }}>
-                                      {issue.storyPoints} SP
-                                    </span>
-                                  )}
-                                  <span className="issue-estimate">
-                                  {issue.originalEstimate > 0 ? (
-                                    <span>
-                                      <span style={{ fontWeight: '600' }}>
-                                        {(issue.originalEstimate / hoursPerDay).toFixed(1)}d
-                                      </span>
-                                      <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '2px' }}>
-                                        ({formatHours(issue.originalEstimate)})
-                                      </span>
-                                    </span>
-                                  ) : '-'}
-                                </span>
-                                </div>
-                              ))}
-                            </div>
+                          <td colSpan="6" style={{ padding: '0 12px 12px 24px', background: 'var(--bg-secondary)' }}>
+                            <table className="planning-table" style={{ marginTop: '8px', fontSize: '12px' }}>
+                              <thead>
+                                <tr style={{ background: 'var(--bg-tertiary)' }}>
+                                  <th style={{ padding: '6px 8px' }} title="Jira issue key">Key</th>
+                                  <th style={{ padding: '6px 8px' }} title="Issue type (Story, Bug, Task, etc.)">Type</th>
+                                  <th style={{ padding: '6px 8px' }} title="Issue title/description">Summary</th>
+                                  <th style={{ padding: '6px 8px' }} className="text-center" title="Current workflow status">Status</th>
+                                  <th style={{ padding: '6px 8px' }} className="text-center" title="Committed effort = Remaining estimate + Work logged during this sprint">Work Allocated</th>
+                                  <th style={{ padding: '6px 8px' }} className="text-center" title="Time logged during this sprint only">Work Logged</th>
+                                  <th style={{ padding: '6px 8px' }} className="text-center" title="Remaining time estimate from Jira">Remaining Est.</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {item.work.assignedIssues.map(issue => {
+                                  // Calculate committed effort for this task (remaining + work logged in sprint)
+                                  // All tickets (including late additions) count remaining + logged work
+                                  const workLoggedInSprint = issue.workLogged || 0;
+                                  const remainingEst = issue.remainingEstimate || 0;
+                                  const committedEffort = remainingEst + workLoggedInSprint;
+                                  
+                                  return (
+                                    <tr key={issue.key}>
+                                      <td style={{ padding: '6px 8px' }}>
+                                        <a href={getJiraLink(jiraBaseUrl, issue.key)} target="_blank" rel="noopener noreferrer" className="issue-key" style={{ textDecoration: 'none', fontSize: '11px' }}>
+                                          {issue.key} <ExternalLink size={9} />
+                                        </a>
+                                        {issue.isLateAddition && (
+                                          <span className="status-badge" style={{ fontSize: '9px', backgroundColor: 'var(--accent-yellow)', color: '#000', marginLeft: '4px' }}>Late</span>
+                                        )}
+                                      </td>
+                                      <td style={{ padding: '6px 8px' }}>
+                                        <span className={`status-badge ${issue.issueType === 'Bug' ? 'danger' : 'info'}`} style={{ fontSize: '10px' }}>
+                                          {issue.issueType}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '6px 8px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        <a href={getJiraLink(jiraBaseUrl, issue.key)} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
+                                          {issue.summary}
+                                        </a>
+                                      </td>
+                                      <td style={{ padding: '6px 8px' }} className="text-center">
+                                        <span className={`status-badge ${issue.isCompleted ? 'success' : 'info'}`} style={{ fontSize: '10px' }}>
+                                          {issue.status}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '6px 8px', fontWeight: '600' }} className="text-center">
+                                        {committedEffort > 0 ? (
+                                          <span>
+                                            {(committedEffort / hoursPerDay).toFixed(1)}d
+                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '2px' }}>
+                                              ({formatHours(committedEffort)})
+                                            </span>
+                                          </span>
+                                        ) : '-'}
+                                      </td>
+                                      <td style={{ padding: '6px 8px', color: 'var(--accent-green)' }} className="text-center">
+                                        {workLoggedInSprint > 0 ? formatHours(workLoggedInSprint) : '-'}
+                                      </td>
+                                      <td style={{ padding: '6px 8px' }} className="text-center">
+                                        {remainingEst > 0 ? formatHours(remainingEst) : '-'}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </td>
                         </tr>
                       )}

@@ -161,11 +161,11 @@ function IssuesTable({
   const sortedIssues = sortData(filteredIssues);
 
   // Sortable header component with column filter
-  const SortHeader = ({ label, column, className = '', filterable = true }) => {
+  const SortHeader = ({ label, column, className = '', filterable = true, tooltip = '' }) => {
     const hasFilter = columnFilters[column] && columnFilters[column].trim() !== '';
     
     return (
-      <th className={className} style={{ position: 'relative', minWidth: '80px' }}>
+      <th className={className} style={{ position: 'relative', minWidth: '80px' }} title={tooltip}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <div 
             style={{ 
@@ -306,22 +306,22 @@ function IssuesTable({
         <table className="planning-table">
           <thead>
             <tr>
-              <SortHeader label="Key" column="key" />
-              <SortHeader label="Summary" column="summary" />
+              <SortHeader label="Key" column="key" tooltip="Jira issue key" />
+              <SortHeader label="Summary" column="summary" tooltip="Issue title/description" />
               {isProdIssues ? (
-                <SortHeader label="Priority" column="priority" className="text-center" />
+                <SortHeader label="Priority" column="priority" className="text-center" tooltip="Issue priority level" />
               ) : (
-                <th className="text-center">Parent</th>
+                <th className="text-center" title="Parent story for subtasks">Parent</th>
               )}
-              <SortHeader label="Status" column="status" className="text-center" />
-              <SortHeader label="Assignee" column="assignee" className="text-center" />
-              <SortHeader label="Dev Est." column="devEstimate" className="text-center" />
-              <SortHeader label="QA Est." column="qaEstimate" className="text-center" />
-              <SortHeader label="Total Est." column="totalEstimate" className="text-center" />
-              <SortHeader label="Work Logged" column="workLogged" className="text-center" />
-              {showStoryPoints && <SortHeader label="Story Points" column="storyPoints" className="text-center" />}
-              {showDueDate && <SortHeader label="Due Date" column="dueDate" className="text-center" />}
-              {showDelay && <th className="text-center">Delay</th>}
+              <SortHeader label="Status" column="status" className="text-center" tooltip="Current workflow status" />
+              <SortHeader label="Assignee" column="assignee" className="text-center" tooltip="Team member assigned to this issue" />
+              <SortHeader label="Dev Est." column="devEstimate" className="text-center" tooltip="Development estimate from Dev subtasks" />
+              <SortHeader label="QA Est." column="qaEstimate" className="text-center" tooltip="QA/Testing estimate from QA subtasks" />
+              <SortHeader label="Total Est." column="totalEstimate" className="text-center" tooltip="Total original estimate (Dev + QA)" />
+              <SortHeader label="Work Logged" column="workLogged" className="text-center" tooltip="Time logged during this sprint" />
+              {showStoryPoints && <SortHeader label="Story Points" column="storyPoints" className="text-center" tooltip="Story point estimate for sizing" />}
+              {showDueDate && <SortHeader label="Due Date" column="dueDate" className="text-center" tooltip="Target completion date" />}
+              {showDelay && <th className="text-center" title="Days overdue past due date">Delay</th>}
             </tr>
           </thead>
           <tbody>
@@ -330,6 +330,11 @@ function IssuesTable({
               const hasSubtasks = childSubtasks.length > 0;
               const isExpanded = expandedStories[issue.key];
               const totalEst = (issue.devEstimate || 0) + (issue.qaEstimate || 0) || issue.originalEstimate;
+              // Calculate work logged from subtasks if parent has subtasks, otherwise use issue's workLogged
+              const workLoggedFromSubtasks = hasSubtasks 
+                ? childSubtasks.reduce((sum, st) => sum + (st.workLogged || 0), 0)
+                : 0;
+              const effectiveWorkLogged = hasSubtasks ? workLoggedFromSubtasks : (issue.workLogged || 0);
               const delayReason = showDelay ? getDelayReason(issue) : null;
               const assigneeName = getAssigneeName ? getAssigneeName(issue) : issue.assignee;
 
@@ -393,7 +398,7 @@ function IssuesTable({
                       {formatEstimate(totalEst)}
                     </td>
                     <td className="text-center" style={{ color: 'var(--accent-purple)' }}>
-                      {formatEstimate(issue.workLogged)}
+                      {formatEstimate(effectiveWorkLogged)}
                     </td>
                     {showStoryPoints && <td className="text-center">{issue.storyPoints || '-'}</td>}
                     {showDueDate && (

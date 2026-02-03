@@ -12,11 +12,11 @@ A comprehensive sprint management tool that integrates with Jira to provide capa
 - **Carryover & Late Addition Highlighting**: Orange for carryovers, yellow for mid-sprint additions
 - **Collapsible Sections**: Expandable leaves and holidays sections with team member details
 
-### Team Timeline (WIP)
+### Team Timeline
 - **Gantt-Style Visualization**: Visual timeline showing task assignments across the sprint duration
-- **Task Bars**: Color-coded bars showing each subtask's duration based on start date and due date
+- **Task Bars**: Color-coded bars showing each task's duration from start date to due date
 - **Member Grouping**: Tasks grouped by team member for easy workload visualization
-- **Interactive**: Hover for task details, click to open in Jira
+- **Interactive**: Click task bars to view details in a popup modal
 
 ### Standup Board
 - **Kanban-Style Layout**: Three columns - TO DO, IN PROGRESS, DONE
@@ -144,9 +144,10 @@ Access the application:
 
 ### 3. Team Timeline
 
-1. Navigate to the **Timeline (WIP)** tab
+1. Navigate to the **Timeline** tab
 2. View Gantt-style visualization of task assignments
-3. Identify scheduling conflicts and workload distribution
+3. Click on task bars to view detailed information
+4. Identify scheduling conflicts and workload distribution
 
 ### 4. Daily Standup
 
@@ -241,9 +242,6 @@ Subtasks are classified based on:
 
 ## Known Issues
 
-### Timeline Component
-- **Date Display Issues**: Tasks may show incorrect dates on the timeline visualization
-- **Ticket ID Display**: Previously showed only numbers (e.g., 8128 instead of CPI-8128) - now fixed
 
 ### Sprint Selection & Refresh
 - **Page Crash**: Changing sprint while on tabs other than Sprint Planning/Active Sprints/Sprint Retro causes the page to crash
@@ -253,4 +251,4 @@ Subtasks are classified based on:
 
 ## License
 
-MIT
+NA

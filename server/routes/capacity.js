@@ -47,7 +47,7 @@ router.get('/sprint/:sprintId', async (req, res) => {
       const worklogPromises = allIssues.map(async (issue) => {
         try {
           const worklogs = await jiraClient.getWorkLogs(issue.key);
-          if (worklogs && worklogs.worklogs) {
+          if (worklogs && worklogs.worklogs && worklogs.worklogs.length > 0) {
             worklogsByIssue[issue.key] = worklogs.worklogs;
           }
         } catch (err) {
@@ -57,13 +57,14 @@ router.get('/sprint/:sprintId', async (req, res) => {
       await Promise.all(worklogPromises);
     }
     
-    // Calculate assigned work - exclude Done issues for Sprint Planning
+    // Calculate assigned work - include all issues (Done tickets needed for Standup page)
+    // Frontend will filter out Done tickets for Sprint Planning display if needed
     const assignedWork = capacityCalculator.calculateAssignedWork(
       allIssues, 
       teamMembers, 
       sprintStartDate, 
       sprint.name, 
-      true, // excludeDone = true for Sprint Planning
+      false, // excludeDone = false - include all issues for Standup page
       sprintEndDate,
       sprint.state,
       worklogsByIssue

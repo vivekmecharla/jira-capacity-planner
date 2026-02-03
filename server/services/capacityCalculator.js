@@ -214,7 +214,8 @@ class CapacityCalculator {
         assignedIssues: [],
         totalEstimatedHours: 0,
         totalLoggedHours: 0,
-        totalRemainingHours: 0
+        totalRemainingHours: 0,
+        totalCommittedHours: 0
       };
     });
     
@@ -225,7 +226,8 @@ class CapacityCalculator {
       assignedIssues: [],
       totalEstimatedHours: 0,
       totalLoggedHours: 0,
-      totalRemainingHours: 0
+      totalRemainingHours: 0,
+      totalCommittedHours: 0
     };
     
     // First pass: collect all subtasks by parent key
@@ -267,18 +269,7 @@ class CapacityCalculator {
         || issue.fields.storyPoints
         || null;
       
-      // Log first issue's custom fields to help identify the correct field
-      if (index === 0) {
-        logger.debug('First issue fields sample:', issue.key);
-        const customFields = Object.keys(issue.fields).filter(k => k.startsWith('customfield_'));
-        logger.debug('Custom fields available:', customFields);
-        customFields.forEach(cf => {
-          if (issue.fields[cf] !== null) {
-            logger.debug(`  ${cf}:`, issue.fields[cf]);
-          }
-        });
-      }
-      
+            
       // Determine if issue is completed based on status
       // For Production Issues/Bugs, completed statuses from workflow (green boxes):
       const completedStatuses = [
@@ -373,24 +364,34 @@ class CapacityCalculator {
       const effectiveEstimate = totalEstimateFromSubtasks > 0 ? totalEstimateFromSubtasks : originalEstimate;
       
       // Calculate work logged from worklogs between sprint dates
+      // For sprint planning/capacity, we only want work logged DURING this sprint
       let workLogged = 0;
       const issueWorklogs = worklogsByIssue[issue.key] || [];
       if (sprintState === 'future') {
         // Future sprints have 0 work logged
         workLogged = 0;
       } else if (issueWorklogs.length > 0) {
+        // Filter worklogs to only those within sprint dates (compare dates only, ignore time)
+        // Normalize sprint dates to start of day for comparison
+        const sprintStartDateOnly = sprintStartDate ? new Date(sprintStartDate.getFullYear(), sprintStartDate.getMonth(), sprintStartDate.getDate()) : null;
+        const sprintEndDateOnly = sprintEndDate ? new Date(sprintEndDate.getFullYear(), sprintEndDate.getMonth(), sprintEndDate.getDate(), 23, 59, 59, 999) : null;
+        
         issueWorklogs.forEach(wl => {
           const started = new Date(wl.started);
-          const startCheck = sprintStartDate ? started >= sprintStartDate : true;
-          const endCheck = sprintEndDate ? started <= sprintEndDate : true;
+          // Normalize worklog date to start of day for comparison
+          const startedDateOnly = new Date(started.getFullYear(), started.getMonth(), started.getDate());
+          const startCheck = sprintStartDateOnly ? startedDateOnly >= sprintStartDateOnly : true;
+          const endCheck = sprintEndDateOnly ? startedDateOnly <= sprintEndDateOnly : true;
           if (startCheck && endCheck) {
             workLogged += (wl.timeSpentSeconds || 0) / 3600;
           }
         });
-      } else {
-        // Fallback to timespent if no worklogs available
-        workLogged = timeSpent;
       }
+      // NOTE: Do NOT fallback to timeSpent - it includes work from ALL sprints
+      // If worklogs aren't available, workLogged stays 0 for this sprint
+      
+      // Start date field - use the specific custom field identified
+      const startDate = issue.fields.customfield_12939 || null;
       
       const issueData = {
         key: issue.key,
@@ -412,20 +413,28 @@ class CapacityCalculator {
         hasSubtasks: childSubtasks.length > 0,
         isSubtask: issue.fields.issuetype?.subtask === true,
         isCompleted,
+        startDate: startDate,
         dueDate: issue.fields.duedate || null,
         created: issue.fields.created || null
       };
       
+      // Include both remaining estimate and logged work for ALL tickets (including late additions)
+      // This ensures utilization increases when tickets are added mid-sprint
+      // Only use workLogged (which is filtered to sprint dates), NOT timeSpent (which includes all time ever logged)
+      const committedForThisIssue = remainingEstimate + workLogged;
+      
       if (memberWork[assigneeId]) {
         memberWork[assigneeId].assignedIssues.push(issueData);
-        memberWork[assigneeId].totalEstimatedHours += remainingEstimate; // Use remaining estimate (excludes logged work)
+        memberWork[assigneeId].totalEstimatedHours += remainingEstimate;
         memberWork[assigneeId].totalLoggedHours += workLogged;
         memberWork[assigneeId].totalRemainingHours += remainingEstimate;
+        memberWork[assigneeId].totalCommittedHours += committedForThisIssue;
       } else {
         memberWork['unassigned'].assignedIssues.push(issueData);
-        memberWork['unassigned'].totalEstimatedHours += remainingEstimate; // Use remaining estimate (excludes logged work)
+        memberWork['unassigned'].totalEstimatedHours += remainingEstimate;
         memberWork['unassigned'].totalLoggedHours += workLogged;
         memberWork['unassigned'].totalRemainingHours += remainingEstimate;
+        memberWork['unassigned'].totalCommittedHours += committedForThisIssue;
       }
     });
     
@@ -443,11 +452,14 @@ class CapacityCalculator {
         assignedIssues: [],
         totalEstimatedHours: 0,
         totalLoggedHours: 0,
-        totalRemainingHours: 0
+        totalRemainingHours: 0,
+        totalCommittedHours: 0
       };
       
       const availableHours = member.allocatedHours !== undefined ? member.allocatedHours : member.availableHours;
-      const committedHours = work.totalRemainingHours; // Use remaining estimates only
+      // Use totalCommittedHours which includes logged work for non-late tickets
+      // This ensures utilization doesn't decrease as people log work
+      const committedHours = work.totalCommittedHours;
       const remainingCapacity = availableHours - committedHours;
       const utilizationPercent = availableHours > 0 
         ? Math.round((committedHours / availableHours) * 100) 
@@ -472,13 +484,20 @@ class CapacityCalculator {
         work: {
           assignedIssues: work.assignedIssues,
           totalEstimatedHours: work.totalEstimatedHours,
+          // UI: "Work Allocated" - includes remaining + logged work for non-late tickets
+          workAllocated: work.totalCommittedHours,
+          totalCommittedHours: work.totalCommittedHours, // Keep for backward compatibility
           totalLoggedHours: work.totalLoggedHours,
           totalRemainingHours: work.totalRemainingHours,
           issueCount: work.assignedIssues.length
         },
         capacity: {
-          committedHours,
-          remainingCapacity,
+          // UI: "Work Allocated" column value
+          workAllocated: committedHours,
+          committedHours, // Keep for backward compatibility
+          // UI: "Available Bandwidth" column value
+          availableBandwidth: remainingCapacity,
+          remainingCapacity, // Keep for backward compatibility
           utilizationPercent,
           isOvercommitted: remainingCapacity < 0
         }
@@ -497,6 +516,8 @@ class CapacityCalculator {
         work: {
           assignedIssues: assignedWork['unassigned'].assignedIssues,
           totalEstimatedHours: assignedWork['unassigned'].totalEstimatedHours,
+          workAllocated: assignedWork['unassigned'].totalCommittedHours,
+          totalCommittedHours: assignedWork['unassigned'].totalCommittedHours,
           totalLoggedHours: assignedWork['unassigned'].totalLoggedHours,
           totalRemainingHours: assignedWork['unassigned'].totalRemainingHours,
           issueCount: assignedWork['unassigned'].assignedIssues.length
@@ -510,40 +531,61 @@ class CapacityCalculator {
     const allIssues = planning.flatMap(p => p.work.assignedIssues);
     const parentIssues = allIssues.filter(i => !i.isSubtask);
     
-    // Calculate Dev and QA committed hours from parent issues only using remaining estimates
+    // Calculate Dev and QA committed hours from parent issues only
+    // For non-late tickets: include logged work (remaining + logged = original commitment)
+    // For late tickets: only count remaining estimate (not part of original commitment)
     let totalDevCommitted = 0;
     let totalQaCommitted = 0;
     
     parentIssues.forEach(issue => {
+      const workLogged = issue.workLogged || 0;
+      const isLate = issue.isLateAddition;
+      
       if (issue.hasSubtasks) {
-        // For issues with subtasks, calculate remaining Dev/QA estimates
-        // This would require fetching subtask remaining estimates, for now use original logic
+        // For issues with subtasks, use devEstimate/qaEstimate
         totalDevCommitted += issue.devEstimate || 0;
         totalQaCommitted += issue.qaEstimate || 0;
+        // Add logged work proportionally for non-late tickets
+        if (!isLate) {
+          const totalEstimate = (issue.devEstimate || 0) + (issue.qaEstimate || 0);
+          if (totalEstimate > 0) {
+            totalDevCommitted += workLogged * ((issue.devEstimate || 0) / totalEstimate);
+            totalQaCommitted += workLogged * ((issue.qaEstimate || 0) / totalEstimate);
+          } else {
+            totalDevCommitted += workLogged; // Default to dev if no estimates
+          }
+        }
       } else {
-        // No subtasks - use remaining estimate, default to Dev
-        totalDevCommitted += issue.remainingEstimate || 0;
+        // No subtasks - use remaining estimate + logged work for non-late, default to Dev
+        const committed = isLate ? (issue.remainingEstimate || 0) : (issue.remainingEstimate || 0) + workLogged;
+        totalDevCommitted += committed;
       }
     });
     
     const totalCommitted = totalDevCommitted + totalQaCommitted;
     
     const totals = {
+      // UI: "Availability" column total
       totalTeamCapacity: teamCapacity.totalCapacity,
       totalTeamCapacityDays: teamCapacity.totalCapacity / hoursPerDay,
-      totalCommitted,
+      // UI: "Work Allocated" column total
+      totalWorkAllocated: totalCommitted,
+      totalCommitted, // Keep for backward compatibility
       totalCommittedDays: totalCommitted / hoursPerDay,
       totalDevCommitted,
       totalDevCommittedDays: totalDevCommitted / hoursPerDay,
       totalQaCommitted,
       totalQaCommittedDays: totalQaCommitted / hoursPerDay,
-      totalRemaining: 0,
+      // UI: "Available Bandwidth" column total
+      totalAvailableBandwidth: 0,
+      totalRemaining: 0, // Keep for backward compatibility
       totalRemainingDays: 0,
       totalStoryPoints: parentIssues.reduce((s, i) => s + (i.storyPoints || 0), 0),
       totalIssues: parentIssues.length,
       hoursPerDay
     };
     totals.totalRemaining = totals.totalTeamCapacity - totals.totalCommitted;
+    totals.totalAvailableBandwidth = totals.totalRemaining;
     totals.totalRemainingDays = totals.totalRemaining / hoursPerDay;
     totals.teamUtilization = totals.totalTeamCapacity > 0 
       ? Math.round((totals.totalCommitted / totals.totalTeamCapacity) * 100)

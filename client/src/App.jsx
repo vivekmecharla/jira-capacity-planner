@@ -338,7 +338,7 @@ function App() {
           onClick={() => setActiveTab('timeline')}
         >
           <GitBranch size={16} style={{ marginRight: 8 }} />
-          Timeline (WIP)
+          Timeline
         </button>
         <button
           className={`tab ${activeTab === 'standup' ? 'active' : ''}`}
