@@ -233,7 +233,7 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
       </div>
 
       {/* Two Column Layout: Charts + Team Capacity Table */}
-      <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: '20px', marginBottom: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '20px', marginBottom: '20px' }}>
         {/* Left Column - Charts and Collapsible Sections */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {(() => {
@@ -673,11 +673,11 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
             <table className="planning-table">
               <thead>
                 <tr>
-                  <th style={{ width: '200px' }} title="Team member name">Team Member</th>
-                  <th className="text-center" title="Number of issues assigned to this member">Issues</th>
-                  <th className="text-center" title="Available working hours after leaves and holidays, adjusted by role allocation">Availability</th>
-                  <th className="text-center" title="Total committed work = Remaining estimate + Work logged during this sprint (for non-late tickets)">Work Allocated</th>
-                  <th className="text-center" title="Remaining capacity = Availability - Work Allocated. Negative means overcommitted.">Available Bandwidth</th>
+                  <th style={{ width: '250px' }} title="Team member name">Team Member</th>
+                  <th className="text-center" style={{ width: '80px' }} title="Number of issues assigned to this member">Issues</th>
+                  <th className="text-center" style={{ width: '120px' }} title="Available working hours after leaves and holidays, adjusted by role allocation">Availability</th>
+                  <th className="text-center" style={{ width: '140px' }} title="Total committed work = Remaining estimate + Work logged during this sprint (for non-late tickets)">Work Allocated</th>
+                  <th className="text-center" style={{ width: '140px' }} title="Remaining capacity = Availability - Work Allocated. Negative means overcommitted.">Available Bandwidth</th>
                   <th style={{ width: '150px' }} title="Percentage of availability that is allocated to work">Utilization</th>
                 </tr>
               </thead>

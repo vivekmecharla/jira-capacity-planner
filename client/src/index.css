@@ -94,6 +94,21 @@ body {
   gap: 12px;
 }
 
+.dropdown-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dropdown-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-left: 2px;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

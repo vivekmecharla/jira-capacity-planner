@@ -247,53 +247,62 @@ function App() {
         <div className="header-actions">
           {connectionStatus === 'connected' && (
             <>
-              <select
-                className="select"
-                value={selectedProject?.id || ''}
-                onChange={(e) => {
-                  const project = projects.find(p => p.id === e.target.value);
-                  setSelectedProject(project);
-                }}
-                style={{ minWidth: '180px' }}
-              >
-                {projects.map(project => (
-                  <option key={project.id} value={project.id}>{project.name}</option>
-                ))}
-              </select>
-              <select
-                className="select"
-                value={selectedBoard?.id || ''}
-                onChange={(e) => {
-                  const board = boards.find(b => b.id === parseInt(e.target.value));
-                  setSelectedBoard(board);
-                }}
-              >
-                {boards.length === 0 ? (
-                  <option value="">No boards available</option>
-                ) : (
-                  boards.map(board => (
-                    <option key={board.id} value={board.id}>{board.name}</option>
-                  ))
-                )}
-              </select>
-              <select
-                className="select"
-                value={selectedSprint?.id || ''}
-                onChange={(e) => {
-                  const sprint = sprints.find(s => s.id === parseInt(e.target.value));
-                  setSelectedSprint(sprint);
-                }}
-              >
-                {sprints.length === 0 ? (
-                  <option value="">No sprints available</option>
-                ) : (
-                  sprints.map(sprint => (
-                    <option key={sprint.id} value={sprint.id}>
-                      {sprint.name} {sprint.state === 'active' ? '(Active)' : sprint.state === 'closed' ? '(Closed)' : '(Future)'}
-                    </option>
-                  ))
-                )}
-              </select>
+              <div className="dropdown-group">
+                <label className="dropdown-label">Project</label>
+                <select
+                  className="select"
+                  value={selectedProject?.id || ''}
+                  onChange={(e) => {
+                    const project = projects.find(p => p.id === e.target.value);
+                    setSelectedProject(project);
+                  }}
+                  style={{ minWidth: '180px' }}
+                >
+                  {projects.map(project => (
+                    <option key={project.id} value={project.id}>{project.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="dropdown-group">
+                <label className="dropdown-label">Board</label>
+                <select
+                  className="select"
+                  value={selectedBoard?.id || ''}
+                  onChange={(e) => {
+                    const board = boards.find(b => b.id === parseInt(e.target.value));
+                    setSelectedBoard(board);
+                  }}
+                >
+                  {boards.length === 0 ? (
+                    <option value="">No boards available</option>
+                  ) : (
+                    boards.map(board => (
+                      <option key={board.id} value={board.id}>{board.name}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+              <div className="dropdown-group">
+                <label className="dropdown-label">Sprint</label>
+                <select
+                  className="select"
+                  value={selectedSprint?.id || ''}
+                  onChange={(e) => {
+                    const sprint = sprints.find(s => s.id === parseInt(e.target.value));
+                    setSelectedSprint(sprint);
+                  }}
+                >
+                  {sprints.length === 0 ? (
+                    <option value="">No sprints available</option>
+                  ) : (
+                    sprints.map(sprint => (
+                      <option key={sprint.id} value={sprint.id}>
+                        {sprint.name} {sprint.state === 'active' ? '(Active)' : sprint.state === 'closed' ? '(Closed)' : '(Future)'}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
               <button 
                 className={`btn ${includeClosedSprints ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setIncludeClosedSprints(!includeClosedSprints)}

@@ -17,6 +17,9 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
   
   // State for expandable pie charts
   const [showTicketsBreakdown, setShowTicketsBreakdown] = useState(false);
+  
+  // State for collapsible All Sprint Issues section
+  const [showAllIssues, setShowAllIssues] = useState(false);
 
   useEffect(() => {
     if (sprint?.id) {
@@ -475,19 +478,39 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
         </div>
       )}
 
-      {/* All Issues with Late Additions Highlighted */}
+      {/* All Issues with Late Additions Highlighted - Collapsible */}
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 className="card-title" style={{ margin: 0 }}>All Sprint Issues ({issues.length}){allFilter && ` - showing ${sortedAllIssues.length}`}</h3>
-          <FilterToolbar 
-            show={showAllFilter} 
-            setShow={setShowAllFilter} 
-            filter={allFilter} 
-            setFilter={setAllFilter}
-            placeholder="Filter by key, type, status..."
-          />
+        <div 
+          style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: showAllIssues ? '16px' : '0',
+            cursor: 'pointer',
+            padding: '8px 0'
+          }}
+          onClick={() => setShowAllIssues(!showAllIssues)}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="card-title" style={{ margin: 0 }}>
+              All Sprint Issues ({issues.length}){allFilter && ` - showing ${sortedAllIssues.length}`}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {showAllIssues ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        
+        {showAllIssues && (
+          <>
+            <FilterToolbar 
+              show={showAllFilter} 
+              setShow={setShowAllFilter} 
+              filter={allFilter} 
+              setFilter={setAllFilter}
+              placeholder="Filter by key, type, status..."
+            />
+            <div style={{ overflowX: 'auto' }}>
           <table className="planning-table">
             <thead>
               <tr>
@@ -542,7 +565,9 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
               })}
             </tbody>
           </table>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

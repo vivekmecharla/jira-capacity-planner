@@ -5,6 +5,7 @@ const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
 
 function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
   const [selectedMember, setSelectedMember] = useState(null);
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
 
   if (loading) {
     return (
@@ -72,8 +73,21 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     return subtasksWithParentInfo.filter(subtask => subtask.assignee?.accountId === selectedMember);
   }, [subtasksWithParentInfo, selectedMember]);
 
-  // Categorize subtasks by status into columns
-  const columns = useMemo(() => {
+  // Toggle collapse state for a parent group
+  const toggleGroupCollapse = (parentKey) => {
+    setCollapsedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(parentKey)) {
+        newSet.delete(parentKey);
+      } else {
+        newSet.add(parentKey);
+      }
+      return newSet;
+    });
+  };
+
+  // Group subtasks by parent and categorize by status into columns
+  const parentGroups = useMemo(() => {
     const todoStatuses = ['To Do', 'Open', 'Backlog', 'New', 'Reopened'];
     const inProgressStatuses = ['In Progress', 'In Development', 'Dev - Pre work', 'Dev - Analysis', 
       'Dev - Development', 'Dev - Code Review', 'Dev - QA Support', 'Dev - Changes', 
@@ -93,18 +107,24 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
       return 'todo';
     };
 
-    const todo = [];
-    const inProgress = [];
-    const done = [];
-
+    // Group subtasks by parent key
+    const groupedByParent = {};
+    
     filteredSubtasks.forEach(subtask => {
+      const parentKey = subtask.parentKey || 'no-parent';
       const column = getColumn(subtask.status);
-      if (column === 'todo') todo.push(subtask);
-      else if (column === 'inProgress') inProgress.push(subtask);
-      else done.push(subtask);
+      
+      if (!groupedByParent[parentKey]) {
+        groupedByParent[parentKey] = {
+          parentInfo: subtask.parentInfo,
+          subtasks: { todo: [], inProgress: [], done: [] }
+        };
+      }
+      
+      groupedByParent[parentKey].subtasks[column].push(subtask);
     });
 
-    return { todo, inProgress, done };
+    return groupedByParent;
   }, [filteredSubtasks]);
 
   // Time tracking progress bar component
@@ -162,36 +182,27 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     return color;
   };
 
-  // Subtask card component (primary card showing subtask with parent info)
+  // Format date helper
+  const formatDate = (dateString) => {
+    if (!dateString) return null;
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Subtask card component (simplified without parent info)
   const SubtaskCard = ({ subtask }) => {
-    const parentInfo = subtask.parentInfo;
-    const parentTypeBadge = parentInfo ? getIssueTypeBadge(parentInfo.issueType) : null;
+    const startDate = formatDate(subtask.startDate);
+    const dueDate = formatDate(subtask.dueDate);
     
     return (
       <div className="standup-subtask-card">
-        {/* Parent info section */}
-        {parentInfo && (
-          <div className="parent-info-section">
-            <span 
-              className="parent-type-badge"
-              style={{ backgroundColor: parentTypeBadge?.bg, color: parentTypeBadge?.text }}
-            >
-              {parentInfo.issueType}
-            </span>
-            <a 
-              href={getJiraLink(jiraBaseUrl, parentInfo.key)} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="parent-key"
-            >
-              {parentInfo.key}
-              <ExternalLink size={10} style={{ marginLeft: 3 }} />
-            </a>
-            <span className="parent-summary-text">{parentInfo.summary}</span>
-          </div>
-        )}
-        
-        {/* Subtask main content */}
         <div className="subtask-main">
           <div className="subtask-header">
             <a 
@@ -211,6 +222,23 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
             </span>
           </div>
           <div className="subtask-summary">{subtask.summary}</div>
+          
+          {/* Date information - always visible */}
+          <div className="date-info">
+            <span className="date-item">
+              <span className="date-label">Start:</span>
+              <span className="date-value">
+                {startDate || <span className="no-date">No start date</span>}
+              </span>
+            </span>
+            <span className="date-item">
+              <span className="date-label">Due:</span>
+              <span className="date-value">
+                {dueDate || <span className="no-date">No due date</span>}
+              </span>
+            </span>
+          </div>
+          
           <TimeTrackingBar 
             logged={subtask.workLogged || subtask.timeSpent || 0}
             remaining={subtask.remainingEstimate || 0}
@@ -227,23 +255,117 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     );
   };
 
-  // Column component - now renders subtasks directly
-  const Column = ({ title, subtasks, count }) => (
-    <div className="standup-column">
-      <div className="column-header">
-        <h3>{title}</h3>
-        <span className="count">{count}</span>
-      </div>
-      <div className="column-content">
-        {subtasks.map(subtask => (
-          <SubtaskCard key={subtask.key} subtask={subtask} />
-        ))}
-        {subtasks.length === 0 && (
-          <div className="empty-column">No items</div>
+  // Parent group component - spans across all three columns
+  const ParentGroup = ({ parentKey, parentGroup }) => {
+    const { parentInfo, subtasks } = parentGroup;
+    const isCollapsed = collapsedGroups.has(parentKey);
+    const totalSubtasks = Object.values(subtasks).reduce((total, columnSubtasks) => total + columnSubtasks.length, 0);
+    
+    if (totalSubtasks === 0) return null;
+    
+    return (
+      <div className="parent-group">
+        {parentInfo && (
+          <div className="parent-header">
+            <button 
+              className="collapse-toggle"
+              onClick={() => toggleGroupCollapse(parentKey)}
+              title={isCollapsed ? 'Expand' : 'Collapse'}
+            >
+              <span className={`collapse-icon ${isCollapsed ? 'collapsed' : ''}`}>
+                ▼
+              </span>
+            </button>
+            <span 
+              className="parent-type-badge"
+              style={{ backgroundColor: getIssueTypeBadge(parentInfo.issueType).bg, color: getIssueTypeBadge(parentInfo.issueType).text }}
+            >
+              {parentInfo.issueType}
+            </span>
+            <a 
+              href={getJiraLink(jiraBaseUrl, parentInfo.key)} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="parent-key"
+            >
+              {parentInfo.key}
+              <ExternalLink size={10} style={{ marginLeft: 3 }} />
+            </a>
+            <span className="parent-summary">{parentInfo.summary}</span>
+            <span className="subtask-count">{totalSubtasks} subtask{totalSubtasks !== 1 ? 's' : ''}</span>
+          </div>
+        )}
+        
+        {!isCollapsed && (
+          <div className="parent-columns">
+            <div className="parent-column">
+              <div className="parent-column-header">TO DO ({subtasks.todo.length})</div>
+              <div className="subtasks-list">
+                {subtasks.todo.map(subtask => (
+                  <SubtaskCard key={subtask.key} subtask={subtask} />
+                ))}
+                {subtasks.todo.length === 0 && (
+                  <div className="empty-subtasks">No subtasks</div>
+                )}
+              </div>
+            </div>
+            
+            <div className="parent-column">
+              <div className="parent-column-header">IN PROGRESS ({subtasks.inProgress.length})</div>
+              <div className="subtasks-list">
+                {subtasks.inProgress.map(subtask => (
+                  <SubtaskCard key={subtask.key} subtask={subtask} />
+                ))}
+                {subtasks.inProgress.length === 0 && (
+                  <div className="empty-subtasks">No subtasks</div>
+                )}
+              </div>
+            </div>
+            
+            <div className="parent-column">
+              <div className="parent-column-header">DONE ({subtasks.done.length})</div>
+              <div className="subtasks-list">
+                {subtasks.done.map(subtask => (
+                  <SubtaskCard key={subtask.key} subtask={subtask} />
+                ))}
+                {subtasks.done.length === 0 && (
+                  <div className="empty-subtasks">No subtasks</div>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
-    </div>
-  );
+    );
+  };
+
+  // Main container for all parent groups
+  const ParentGroupsContainer = () => {
+    return (
+      <div className="parent-groups-container">
+        {/* Fixed column headers */}
+        <div className="fixed-headers">
+          <div className="fixed-header">TO DO</div>
+          <div className="fixed-header">IN PROGRESS</div>
+          <div className="fixed-header">DONE</div>
+        </div>
+        
+        {/* Scrollable parent groups */}
+        <div className="parent-groups-scrollable">
+          {Object.entries(parentGroups).map(([parentKey, parentGroup]) => (
+            <ParentGroup 
+              key={parentKey} 
+              parentKey={parentKey}
+              parentGroup={parentGroup}
+            />
+          ))}
+          {Object.keys(parentGroups).length === 0 && (
+            <div className="empty-state">No subtasks found</div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="standup-container">
@@ -278,11 +400,7 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
             {sprint.name} • Total: {filteredSubtasks.length} subtasks
           </span>
         </div>
-        <div className="board-columns">
-          <Column title="TO DO" subtasks={columns.todo} count={columns.todo.length} />
-          <Column title="IN PROGRESS" subtasks={columns.inProgress} count={columns.inProgress.length} />
-          <Column title="DONE" subtasks={columns.done} count={columns.done.length} />
-        </div>
+        <ParentGroupsContainer />
       </div>
       
       <style>{`
@@ -384,60 +502,89 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
           color: var(--text-muted);
         }
         
-        .board-columns {
-          display: flex;
-          gap: 12px;
+        .parent-groups-container {
           flex: 1;
+          display: flex;
+          flex-direction: column;
+          height: 100%;
           min-height: 0;
         }
         
-        .standup-column {
-          flex: 1;
+        .fixed-headers {
+          display: flex;
+          gap: 12px;
+          padding: 0 8px 12px 8px;
           background: var(--bg-secondary);
-          border-radius: 8px;
-          display: flex;
-          flex-direction: column;
-          min-width: 280px;
-        }
-        
-        .column-header {
-          padding: 12px 16px;
           border-bottom: 1px solid var(--border-color);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
+          position: sticky;
+          top: 0;
+          z-index: 10;
         }
         
-        .column-header h3 {
-          margin: 0;
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--text-muted);
-          letter-spacing: 0.5px;
+        .fixed-header {
+          flex: 1;
+          font-size: 13px;
+          font-weight: 700;
+          padding: 10px 16px;
+          border-radius: 8px;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          text-align: center;
+          border: 2px solid transparent;
+          transition: all 0.2s ease;
+          position: relative;
         }
         
-        .column-header .count {
-          background: var(--bg-tertiary);
-          padding: 2px 8px;
-          border-radius: 10px;
-          font-size: 11px;
-          color: var(--text-secondary);
+        .fixed-header:first-child {
+          background: linear-gradient(135deg, rgba(255, 152, 0, 0.1), rgba(255, 152, 0, 0.05));
+          color: #ff9800;
+          border-color: rgba(255, 152, 0, 0.3);
         }
         
-        .column-content {
+        .fixed-header:nth-child(2) {
+          background: linear-gradient(135deg, rgba(33, 150, 243, 0.1), rgba(33, 150, 243, 0.05));
+          color: #2196f3;
+          border-color: rgba(33, 150, 243, 0.3);
+        }
+        
+        .fixed-header:nth-child(3) {
+          background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(76, 175, 80, 0.05));
+          color: #4caf50;
+          border-color: rgba(76, 175, 80, 0.3);
+        }
+        
+        .fixed-header:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .fixed-header:first-child:hover {
+          box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
+        }
+        
+        .fixed-header:nth-child(2):hover {
+          box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+        }
+        
+        .fixed-header:nth-child(3):hover {
+          box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+        
+        .parent-groups-scrollable {
           flex: 1;
           overflow-y: auto;
-          padding: 12px;
+          padding: 8px;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 16px;
+          min-height: 0;
         }
         
-        .empty-column {
+        .empty-state {
           text-align: center;
           color: var(--text-muted);
-          font-size: 13px;
-          padding: 20px;
+          font-size: 14px;
+          padding: 40px;
         }
         
         .standup-parent-card {
@@ -538,54 +685,6 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
           border: 1px solid var(--border-color);
         }
         
-        .parent-info-section {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          padding: 8px 10px;
-          background: var(--bg-tertiary);
-          border-radius: 4px;
-          margin-bottom: 10px;
-          flex-wrap: wrap;
-        }
-        
-        .parent-type-badge {
-          font-size: 9px;
-          padding: 2px 5px;
-          border-radius: 3px;
-          font-weight: 500;
-          text-transform: uppercase;
-          flex-shrink: 0;
-        }
-        
-        .parent-key {
-          font-size: 11px;
-          color: var(--accent-blue);
-          text-decoration: none;
-          display: flex;
-          align-items: center;
-          font-weight: 500;
-          flex-shrink: 0;
-        }
-        
-        .parent-key:hover {
-          text-decoration: underline;
-        }
-        
-        .parent-summary-text {
-          font-size: 11px;
-          color: var(--text-muted);
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          flex: 1;
-          min-width: 0;
-        }
-        
-        .subtask-main {
-          padding-left: 0;
-        }
-        
         .subtask-header {
           display: flex;
           align-items: center;
@@ -598,6 +697,36 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
           color: var(--text-primary);
           margin-bottom: 10px;
           line-height: 1.4;
+        }
+        
+        .date-info {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 10px;
+          flex-wrap: wrap;
+        }
+        
+        .date-item {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          font-size: 11px;
+        }
+        
+        .date-label {
+          color: var(--text-muted);
+          font-weight: 500;
+        }
+        
+        .date-value {
+          color: var(--text-secondary);
+          font-weight: 400;
+        }
+        
+        .date-value .no-date {
+          color: #ef4444;
+          font-style: italic;
+          opacity: 0.8;
         }
         
         .subtask-assignee {
@@ -640,6 +769,127 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
         
         .time-tracking-labels .remaining {
           color: var(--text-muted);
+        }
+        
+        .parent-group {
+          background: var(--bg-secondary);
+          border-radius: 8px;
+          overflow: visible; /* Changed from hidden to visible */
+          border: 1px solid var(--border-color);
+        }
+        
+        .parent-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 16px;
+          background: var(--bg-tertiary);
+          border-bottom: 1px solid var(--border-color);
+          flex-wrap: wrap;
+        }
+        
+        .collapse-toggle {
+          background: none;
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          color: var(--text-muted);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 20px;
+          height: 20px;
+          border-radius: 3px;
+          transition: all 0.2s ease;
+        }
+        
+        .collapse-toggle:hover {
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+        }
+        
+        .collapse-icon {
+          font-size: 12px;
+          transition: transform 0.2s ease;
+        }
+        
+        .collapse-icon.collapsed {
+          transform: rotate(-90deg);
+        }
+        
+        .parent-header .parent-type-badge {
+          font-size: 9px;
+          padding: 2px 5px;
+          border-radius: 3px;
+          font-weight: 500;
+          text-transform: uppercase;
+          flex-shrink: 0;
+        }
+        
+        .parent-header .parent-key {
+          font-size: 11px;
+          color: var(--accent-blue);
+          text-decoration: none;
+          display: flex;
+          align-items: center;
+          font-weight: 500;
+          flex-shrink: 0;
+        }
+        
+        .parent-header .parent-key:hover {
+          text-decoration: underline;
+        }
+        
+        .parent-summary {
+          font-size: 12px;
+          color: var(--text-primary);
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        
+        .subtask-count {
+          font-size: 10px;
+          color: var(--text-muted);
+          background: var(--bg-secondary);
+          padding: 2px 6px;
+          border-radius: 10px;
+          font-weight: 500;
+          flex-shrink: 0;
+        }
+        
+        .parent-columns {
+          display: flex;
+          gap: 12px;
+          padding: 0;
+        }
+        
+        .parent-column {
+          flex: 1;
+          min-width: 0;
+        }
+        
+        .parent-column-header {
+          display: none; /* Hide individual column headers since we have fixed ones */
+        }
+        
+        .subtasks-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 8px;
+        }
+        
+        .empty-subtasks {
+          text-align: center;
+          color: var(--text-muted);
+          font-size: 12px;
+          padding: 16px;
+          background: var(--bg-primary);
+          border-radius: 4px;
+          border: 1px dashed var(--border-color);
         }
       `}</style>
     </div>
