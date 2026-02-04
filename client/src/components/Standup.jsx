@@ -1,12 +1,31 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ExternalLink, User } from 'lucide-react';
 import UserWorkLogs from './UserWorkLogs';
+import { configApi } from '../api';
 
 const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
 
 function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
   const [selectedMember, setSelectedMember] = useState(null);
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+  const [leaves, setLeaves] = useState([]);
+  const [leavesLoading, setLeavesLoading] = useState(true);
+
+  // Fetch leave data on component mount
+  useEffect(() => {
+    const fetchLeaves = async () => {
+      try {
+        const response = await configApi.getLeaves();
+        setLeaves(response.data || []);
+      } catch (error) {
+        console.error('Error fetching leaves:', error);
+      } finally {
+        setLeavesLoading(false);
+      }
+    };
+    
+    fetchLeaves();
+  }, []);
 
   if (loading) {
     return (
@@ -29,6 +48,17 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
 
   const { planning } = planningData;
   const members = planning?.members || [];
+
+  // Get today's leaves
+  const todaysLeaves = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    return leaves.filter(leave => {
+      const startDate = leave.startDate;
+      const endDate = leave.endDate || leave.startDate;
+      return startDate <= today && endDate >= today;
+    });
+  }, [leaves]);
 
   // Get all issues grouped by member
   const allIssues = useMemo(() => {
@@ -393,6 +423,34 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
             </button>
           ))}
         </div>
+        
+        {/* Today's Leaves Section */}
+        <div className="standup-leaves-section">
+          <h4>Today's Leaves</h4>
+          {leavesLoading ? (
+            <div className="leaves-loading">
+              <div className="spinner-small"></div>
+              <span>Loading leaves...</span>
+            </div>
+          ) : todaysLeaves.length > 0 ? (
+            <div className="leaves-list">
+              {todaysLeaves.map((leave, index) => (
+                <div key={leave.id || index} className="leave-item">
+                  <div className="leave-member">{leave.memberName}</div>
+                  <div className="leave-type">
+                    {leave.isHalfDay ? 'Half Day' : 'Full Day'}
+                    {leave.isUnplanned && <span className="unplanned-badge">Unplanned</span>}
+                  </div>
+                  {leave.reason && (
+                    <div className="leave-reason">{leave.reason}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="no-leaves">No leaves today</div>
+          )}
+        </div>
       </div>
       
       <div className="standup-board">
@@ -500,6 +558,101 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+        }
+        
+        .standup-leaves-section {
+          margin-top: 24px;
+          padding-top: 16px;
+          border-top: 2px solid var(--border-color);
+        }
+        
+        .standup-leaves-section h4 {
+          margin: 0 0 14px 0;
+          font-size: 11px;
+          font-weight: 700;
+          color: var(--accent-orange);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        
+        .leaves-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 16px 8px;
+          color: var(--text-muted);
+          font-size: 12px;
+        }
+        
+        .leaves-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        
+        .leave-item {
+          background: linear-gradient(135deg, rgba(255, 152, 0, 0.08), rgba(255, 152, 0, 0.02));
+          border-radius: 8px;
+          padding: 12px;
+          border: 1px solid rgba(255, 152, 0, 0.2);
+          font-size: 12px;
+          transition: all 0.2s ease;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        
+        .leave-item:hover {
+          background: linear-gradient(135deg, rgba(255, 152, 0, 0.12), rgba(255, 152, 0, 0.05));
+          border-color: rgba(255, 152, 0, 0.3);
+        }
+        
+        .leave-member {
+          font-weight: 700;
+          color: var(--text-primary);
+          font-size: 13px;
+          line-height: 1.4;
+        }
+        
+        .leave-type {
+          color: var(--accent-orange);
+          font-weight: 600;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          line-height: 1.4;
+        }
+        
+        .unplanned-badge {
+          background: var(--accent-red);
+          color: #fff;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-size: 9px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+        }
+        
+        .leave-reason {
+          color: var(--text-muted);
+          font-style: italic;
+          font-size: 11px;
+          line-height: 1.4;
+          word-break: break-word;
+        }
+        
+        .no-leaves {
+          text-align: center;
+          color: var(--text-muted);
+          font-size: 12px;
+          padding: 16px 12px;
+          background: var(--bg-tertiary);
+          border-radius: 6px;
+          border: 1px dashed var(--border-color);
         }
         
         .standup-board {
