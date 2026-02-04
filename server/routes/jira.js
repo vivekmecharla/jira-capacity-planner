@@ -144,4 +144,48 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// Get user's worklogs for the last working day
+router.get('/users/:accountId/worklogs', async (req, res) => {
+  try {
+    const { accountId } = req.params;
+    const { projectKey } = req.query;
+    
+    // Get last working day (skip weekends)
+    const lastWorkingDay = jiraClient.getLastWorkingDay();
+    
+    logger.info('Fetching worklogs for user', { 
+      accountId, 
+      date: lastWorkingDay.toISOString().split('T')[0],
+      projectKey 
+    });
+    
+    const workLogs = await jiraClient.getUserWorkLogsForDate(accountId, lastWorkingDay, projectKey);
+    
+    // Calculate summary
+    const totalSeconds = workLogs.reduce((sum, wl) => sum + (wl.timeSpent || 0), 0);
+    const totalHours = totalSeconds / 3600;
+    
+    logger.info('Fetched user worklogs', { 
+      accountId, 
+      count: workLogs.length,
+      totalHours: totalHours.toFixed(2)
+    });
+    
+    res.json({
+      workLogs,
+      summary: {
+        lastWorkingDate: lastWorkingDay.toISOString().split('T')[0],
+        count: workLogs.length,
+        totalHours: parseFloat(totalHours.toFixed(2))
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching user worklogs', { 
+      accountId: req.params.accountId, 
+      error: error.message 
+    });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

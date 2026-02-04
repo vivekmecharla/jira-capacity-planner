@@ -63,4 +63,8 @@ export const capacityApi = {
 // Add retro API to jiraApi
 jiraApi.getSprintRetro = (sprintId) => api.get(`/retro/sprint/${sprintId}`);
 
+// Add user worklogs API
+jiraApi.getUserWorkLogs = (accountId, projectKey = null) => 
+  api.get(`/jira/users/${accountId}/worklogs`, { params: projectKey ? { projectKey } : {} });
+
 export default api;

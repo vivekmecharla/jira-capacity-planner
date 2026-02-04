@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ExternalLink, User } from 'lucide-react';
+import UserWorkLogs from './UserWorkLogs';
 
 const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
 
@@ -403,6 +404,16 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
         <ParentGroupsContainer />
       </div>
       
+      {selectedMember && (
+        <div className="standup-worklog-panel">
+          <UserWorkLogs 
+            accountId={selectedMember}
+            displayName={members.find(m => m.member.accountId === selectedMember)?.member?.displayName}
+            jiraBaseUrl={jiraBaseUrl}
+          />
+        </div>
+      )}
+      
       <style>{`
         .standup-container {
           display: flex;
@@ -417,6 +428,12 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
           background: var(--bg-secondary);
           border-radius: 8px;
           padding: 16px;
+          overflow-y: auto;
+        }
+        
+        .standup-worklog-panel {
+          width: 320px;
+          flex-shrink: 0;
           overflow-y: auto;
         }
         
