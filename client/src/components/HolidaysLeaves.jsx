@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, User } from 'lucide-react';
+import { Plus, Trash2, Calendar, User, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
 import { configApi } from '../api';
 import { format } from 'date-fns';
 
@@ -7,6 +7,9 @@ function HolidaysLeaves() {
   const [holidays, setHolidays] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [zohoStatus, setZohoStatus] = useState({ configured: false, message: '' });
+  const [error, setError] = useState(null);
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [newHoliday, setNewHoliday] = useState({ name: '', date: '' });
@@ -14,9 +17,26 @@ function HolidaysLeaves() {
 
   useEffect(() => {
     loadData();
+    checkZohoStatus();
   }, []);
 
+  const checkZohoStatus = async () => {
+    try {
+      const res = await configApi.getZohoStatus();
+      setZohoStatus(res.data);
+    } catch (err) {
+      console.error('Failed to check Zoho status:', err);
+      setZohoStatus({
+        configured: false,
+        working: false,
+        message: 'Unable to check Zoho status - showing local data'
+      });
+    }
+  };
+
   const loadData = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const [holidaysRes, leavesRes, teamRes] = await Promise.all([
         configApi.getHolidays(),
@@ -28,6 +48,9 @@ function HolidaysLeaves() {
       setTeamMembers(teamRes.data);
     } catch (err) {
       console.error('Failed to load data:', err);
+      setError('Failed to load data from Zoho. Please check your configuration.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,104 +101,156 @@ function HolidaysLeaves() {
   };
 
   return (
-    <div className="grid grid-2">
-      {/* Holidays Section */}
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">
-            <Calendar size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-            Holidays
-          </h3>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowHolidayModal(true)}>
-            <Plus size={14} />
-            Add Holiday
+    <>
+      {/* Zoho Status Banner */}
+      <div className="card" style={{ marginBottom: '20px', padding: '12px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {zohoStatus.working ? (
+              <CheckCircle size={18} style={{ color: 'var(--accent-green)' }} />
+            ) : (
+              <AlertCircle size={18} style={{ color: 'var(--accent-yellow)' }} />
+            )}
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              {zohoStatus.message}
+            </span>
+          </div>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            onClick={loadData}
+            disabled={loading}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <RefreshCw size={14} className={loading ? 'spinning' : ''} />
+            Refresh
           </button>
         </div>
-
-        {holidays.length === 0 ? (
-          <div className="empty-state" style={{ padding: '40px 20px' }}>
-            <p style={{ fontSize: '13px' }}>No holidays configured</p>
-          </div>
-        ) : (
-          <div className="holiday-list">
-            {holidays
-              .sort((a, b) => new Date(a.date) - new Date(b.date))
-              .map(holiday => (
-                <div key={holiday.id} className="holiday-item">
-                  <div>
-                    <div className="holiday-date">
-                      {format(new Date(holiday.date), 'EEEE, MMM d, yyyy')}
-                    </div>
-                    <div className="holiday-name">{holiday.name}</div>
-                  </div>
-                  <button 
-                    className="btn btn-danger btn-sm"
-                    onClick={() => removeHoliday(holiday.id)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-          </div>
-        )}
       </div>
 
-      {/* Leaves Section */}
-      <div className="card">
-        <div className="card-header">
-          <h3 className="card-title">
-            <User size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
-            Team Leaves
-          </h3>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowLeaveModal(true)}>
-            <Plus size={14} />
-            Add Leave
-          </button>
+      {error && (
+        <div className="card" style={{ marginBottom: '20px', padding: '12px 16px', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderLeft: '3px solid var(--accent-red)' }}>
+          <span style={{ fontSize: '13px', color: 'var(--accent-red)' }}>{error}</span>
+        </div>
+      )}
+
+      <div className="grid grid-2">
+        {/* Holidays Section */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">
+              <Calendar size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+              Holidays
+            </h3>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              {holidays.length} holidays
+            </span>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowHolidayModal(true)}>
+              <Plus size={14} />
+              Add Holiday
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="empty-state" style={{ padding: '40px 20px' }}>
+              <p style={{ fontSize: '13px' }}>Loading holidays...</p>
+            </div>
+          ) : holidays.length === 0 ? (
+            <div className="empty-state" style={{ padding: '40px 20px' }}>
+              <p style={{ fontSize: '13px' }}>No holidays found</p>
+            </div>
+          ) : (
+            <div className="holiday-list">
+              {holidays
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .map(holiday => (
+                  <div key={holiday.id} className="holiday-item">
+                    <div>
+                      <div className="holiday-date">
+                        {format(new Date(holiday.date), 'EEEE, MMM d, yyyy')}
+                      </div>
+                      <div className="holiday-name">{holiday.name}</div>
+                    </div>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      onClick={() => removeHoliday(holiday.id)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
         </div>
 
-        {leaves.length === 0 ? (
-          <div className="empty-state" style={{ padding: '40px 20px' }}>
-            <p style={{ fontSize: '13px' }}>No leaves recorded</p>
+        {/* Leaves Section */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">
+              <User size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+              Team Leaves
+            </h3>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              {leaves.length} leaves
+            </span>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowLeaveModal(true)}>
+              <Plus size={14} />
+              Add Leave
+            </button>
           </div>
-        ) : (
-          <div className="leave-list">
-            {leaves
-              .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
-              .map(leave => (
-                <div 
-                  key={leave.id} 
-                  className="leave-item"
-                  style={leave.isUnplanned ? { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderLeft: '3px solid var(--accent-red)' } : {}}
-                >
-                  <div>
-                    <div className="leave-member" style={{ fontWeight: '500', color: leave.isUnplanned ? 'var(--accent-red)' : 'var(--text-primary)' }}>
-                      {leave.memberName || 'Unknown'}
-                      {leave.isUnplanned && (
-                        <span className="status-badge danger" style={{ marginLeft: '8px', fontSize: '10px' }}>Unplanned</span>
-                      )}
-                      {leave.isHalfDay && (
-                        <span className="status-badge warning" style={{ marginLeft: '8px', fontSize: '10px' }}>½ Day</span>
-                      )}
-                    </div>
-                    <div className="leave-date" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      {format(new Date(leave.startDate), 'MMM d')} - {format(new Date(leave.endDate), 'MMM d, yyyy')}
-                    </div>
-                    {leave.reason && (
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {leave.reason}
-                      </div>
-                    )}
-                  </div>
-                  <button 
-                    className="btn btn-danger btn-sm"
-                    onClick={() => removeLeave(leave.id)}
+
+          {loading ? (
+            <div className="empty-state" style={{ padding: '40px 20px' }}>
+              <p style={{ fontSize: '13px' }}>Loading leaves...</p>
+            </div>
+          ) : leaves.length === 0 ? (
+            <div className="empty-state" style={{ padding: '40px 20px' }}>
+              <p style={{ fontSize: '13px' }}>No leaves found</p>
+            </div>
+          ) : (
+            <div className="leave-list">
+              {leaves
+                .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+                .map(leave => (
+                  <div 
+                    key={leave.id} 
+                    className="leave-item"
+                    style={leave.isUnplanned ? { backgroundColor: 'rgba(239, 68, 68, 0.1)', borderLeft: '3px solid var(--accent-red)' } : {}}
                   >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-          </div>
-        )}
+                    <div>
+                      <div className="leave-member" style={{ fontWeight: '500', color: leave.isUnplanned ? 'var(--accent-red)' : 'var(--text-primary)' }}>
+                        {leave.memberName || 'Unknown'}
+                        {leave.isUnplanned && (
+                          <span className="status-badge danger" style={{ marginLeft: '8px', fontSize: '10px' }}>Unplanned</span>
+                        )}
+                        {leave.isHalfDay && (
+                          <span className="status-badge warning" style={{ marginLeft: '8px', fontSize: '10px' }}>½ Day</span>
+                        )}
+                      </div>
+                      <div className="leave-date" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        {format(new Date(leave.startDate), 'MMM d')} - {format(new Date(leave.endDate), 'MMM d, yyyy')}
+                      </div>
+                      {leave.reason && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {leave.reason}
+                        </div>
+                      )}
+                      {leave.leaveType && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Type: {leave.leaveType}
+                        </div>
+                      )}
+                    </div>
+                    <button 
+                      className="btn btn-danger btn-sm"
+                      onClick={() => removeLeave(leave.id)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Add Holiday Modal */}
@@ -319,7 +394,7 @@ function HolidaysLeaves() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

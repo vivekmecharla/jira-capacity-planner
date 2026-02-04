@@ -30,8 +30,8 @@ router.get('/sprint/:sprintId', async (req, res) => {
     // Get team members from config
     const teamMembers = database.getTeamMembers();
     
-    // Calculate team capacity
-    const teamCapacity = capacityCalculator.calculateTeamCapacity(
+    // Calculate team capacity (now async - fetches holidays/leaves from Zoho)
+    const teamCapacity = await capacityCalculator.calculateTeamCapacity(
       teamMembers,
       sprint.startDate,
       sprint.endDate
@@ -110,7 +110,7 @@ router.get('/board/:boardId/summary', async (req, res) => {
       try {
         const issues = await jiraClient.getSprintIssues(sprint.id, 0, 100);
         
-        const teamCapacity = capacityCalculator.calculateTeamCapacity(
+        const teamCapacity = await capacityCalculator.calculateTeamCapacity(
           teamMembers,
           sprint.startDate,
           sprint.endDate

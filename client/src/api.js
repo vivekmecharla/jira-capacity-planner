@@ -33,16 +33,19 @@ export const configApi = {
   updateTeamMember: (accountId, updates) => api.put(`/config/team/${accountId}`, updates),
   removeTeamMember: (accountId) => api.delete(`/config/team/${accountId}`),
   
-  // Holidays
-  getHolidays: () => api.get('/config/holidays'),
+  // Holidays (read-only from Zoho, but editable in DB)
+  getHolidays: (from, to) => api.get('/config/holidays', { params: { from, to } }),
   addHoliday: (holiday) => api.post('/config/holidays', holiday),
   removeHoliday: (id) => api.delete(`/config/holidays/${id}`),
   
-  // Leaves
-  getLeaves: () => api.get('/config/leaves'),
+  // Leaves (read-only from Zoho, but editable in DB)
+  getLeaves: (from, to, email) => api.get('/config/leaves', { params: { from, to, email } }),
   addLeave: (leave) => api.post('/config/leaves', leave),
   updateLeave: (id, updates) => api.put(`/config/leaves/${id}`, updates),
   removeLeave: (id) => api.delete(`/config/leaves/${id}`),
+  
+  // Zoho status
+  getZohoStatus: () => api.get('/config/zoho/status'),
   
   // Sprint Config
   getSprintConfig: () => api.get('/config/sprint'),

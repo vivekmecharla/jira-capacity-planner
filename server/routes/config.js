@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const database = require('../services/database');
+const zohoClient = require('../services/zohoClient');
 const { createLogger } = require('../utils/logger');
 
 const logger = createLogger('ConfigRoutes');
@@ -50,12 +51,33 @@ router.delete('/team/:accountId', (req, res) => {
   }
 });
 
-// Holidays
-router.get('/holidays', (req, res) => {
+// Holidays - fetched from Zoho (read-only)
+router.get('/holidays', async (req, res) => {
   try {
+    const { from, to } = req.query;
+    
+    // Default to current year if no dates provided
+    const currentYear = new Date().getFullYear();
+    const fromDate = from || `${currentYear}-01-01`;
+    const toDate = to || `${currentYear}-12-31`;
+    
+    if (zohoClient.isConfigured()) {
+      try {
+        const holidays = await zohoClient.getHolidays(fromDate, toDate);
+        logger.debug('Fetched holidays from Zoho', { count: holidays.length });
+        res.json(holidays);
+        return;
+      } catch (zohoError) {
+        logger.warn('Zoho API failed, falling back to local database', { error: zohoError.message });
+      }
+    }
+    
+    // Fallback to local DB if Zoho not configured or failed
     const holidays = database.getHolidays();
+    logger.debug('Using local database for holidays', { count: holidays.length });
     res.json(holidays);
   } catch (error) {
+    logger.error('Error fetching holidays', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -78,12 +100,33 @@ router.delete('/holidays/:id', (req, res) => {
   }
 });
 
-// Leaves
-router.get('/leaves', (req, res) => {
+// Leaves - fetched from Zoho (read-only)
+router.get('/leaves', async (req, res) => {
   try {
+    const { from, to, email } = req.query;
+    
+    // Default to current year if no dates provided
+    const currentYear = new Date().getFullYear();
+    const fromDate = from || `${currentYear}-01-01`;
+    const toDate = to || `${currentYear}-12-31`;
+    
+    if (zohoClient.isConfigured()) {
+      try {
+        const leaves = await zohoClient.getLeaves(fromDate, toDate, email);
+        logger.debug('Fetched leaves from Zoho', { count: leaves.length });
+        res.json(leaves);
+        return;
+      } catch (zohoError) {
+        logger.warn('Zoho API failed, falling back to local database', { error: zohoError.message });
+      }
+    }
+    
+    // Fallback to local DB if Zoho not configured or failed
     const leaves = database.getLeaves();
+    logger.debug('Using local database for leaves', { count: leaves.length });
     res.json(leaves);
   } catch (error) {
+    logger.error('Error fetching leaves', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });
@@ -112,6 +155,45 @@ router.delete('/leaves/:id', (req, res) => {
     res.json(leaves);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Check if Zoho is configured and working
+router.get('/zoho/status', async (req, res) => {
+  const configured = zohoClient.isConfigured();
+
+  if (!configured) {
+    return res.json({
+      configured: false,
+      working: false,
+      message: 'Zoho not configured - showing local data'
+    });
+  }
+
+  // Test if Zoho API actually works by making a small request
+  try {
+    // Try to fetch holidays for current month to test connectivity
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const fromDate = startOfMonth.toISOString().split('T')[0];
+    const toDate = endOfMonth.toISOString().split('T')[0];
+
+    await zohoClient.getHolidays(fromDate, toDate);
+
+    return res.json({
+      configured: true,
+      working: true,
+      message: 'Data synced from Zoho People'
+    });
+  } catch (error) {
+    logger.warn('Zoho API test failed', { error: error.message });
+    return res.json({
+      configured: true,
+      working: false,
+      message: 'Zoho configured but not working - showing local data'
+    });
   }
 });
 

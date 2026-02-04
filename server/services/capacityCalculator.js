@@ -51,11 +51,24 @@ class CapacityCalculator {
     });
     
     // Get member's leaves during sprint
-    const memberLeaves = leaves.filter(l => 
-      l.accountId === member.accountId &&
-      new Date(l.startDate) <= new Date(sprintEnd) &&
-      new Date(l.endDate) >= new Date(sprintStart)
-    );
+    // Match by accountId (local DB) OR by email (Zoho integration)
+    const memberEmail = member.emailAddress?.toLowerCase();
+    const memberLeaves = leaves.filter(l => {
+      // Check date range first
+      const inDateRange = new Date(l.startDate) <= new Date(sprintEnd) &&
+                          new Date(l.endDate) >= new Date(sprintStart);
+      if (!inDateRange) return false;
+      
+      // Match by accountId (for local DB leaves)
+      if (l.accountId && l.accountId === member.accountId) return true;
+      
+      // Match by email (for Zoho leaves)
+      if (memberEmail && l.employeeEmail) {
+        return l.employeeEmail.toLowerCase() === memberEmail;
+      }
+      
+      return false;
+    });
     
     // Calculate leave days (support half-day leaves)
     let leaveDays = 0;
@@ -109,19 +122,58 @@ class CapacityCalculator {
     };
   }
 
-  calculateTeamCapacity(teamMembers, sprintStart, sprintEnd) {
-    const holidays = database.getHolidays().filter(h => 
-      new Date(h.date) >= new Date(sprintStart) &&
-      new Date(h.date) <= new Date(sprintEnd)
-    );
-    const leaves = database.getLeaves();
+  async calculateTeamCapacity(teamMembers, sprintStart, sprintEnd) {
+    const zohoClient = require('./zohoClient');
+    
+    // Format dates for API calls
+    const startDateStr = new Date(sprintStart).toISOString().split('T')[0];
+    const endDateStr = new Date(sprintEnd).toISOString().split('T')[0];
+    
+    // Fetch holidays - try Zoho first, fallback to local DB
+    let holidays = [];
+    if (zohoClient.isConfigured()) {
+      try {
+        const allHolidays = await zohoClient.getHolidays(startDateStr, endDateStr);
+        holidays = allHolidays.filter(h => 
+          new Date(h.date) >= new Date(sprintStart) &&
+          new Date(h.date) <= new Date(sprintEnd)
+        );
+        logger.debug('Fetched holidays from Zoho', { count: holidays.length });
+      } catch (err) {
+        logger.warn('Failed to fetch holidays from Zoho, using local DB', { error: err.message });
+        holidays = database.getHolidays().filter(h => 
+          new Date(h.date) >= new Date(sprintStart) &&
+          new Date(h.date) <= new Date(sprintEnd)
+        );
+      }
+    } else {
+      holidays = database.getHolidays().filter(h => 
+        new Date(h.date) >= new Date(sprintStart) &&
+        new Date(h.date) <= new Date(sprintEnd)
+      );
+    }
+    
+    // Fetch leaves - try Zoho first, fallback to local DB
+    let leaves = [];
+    if (zohoClient.isConfigured()) {
+      try {
+        leaves = await zohoClient.getLeaves(startDateStr, endDateStr);
+        logger.debug('Fetched leaves from Zoho', { count: leaves.length });
+      } catch (err) {
+        logger.warn('Failed to fetch leaves from Zoho, using local DB', { error: err.message });
+        leaves = database.getLeaves();
+      }
+    } else {
+      leaves = database.getLeaves();
+    }
+    
     const config = database.getSprintConfig();
     const configuredSprintDays = config.defaultSprintDays || 8;
     
     logger.debug('Using configured sprint days:', configuredSprintDays);
     
     const memberCapacities = teamMembers.map(member => {
-      logger.debug(`Processing member: ${member.displayName}, Role: ${member.role}, RoleAllocation: ${member.roleAllocation}`);
+      logger.debug(`Processing member: ${member.displayName}, Role: ${member.role}, RoleAllocation: ${member.roleAllocation}, Email: ${member.emailAddress}`);
       const availability = this.calculateMemberAvailability(
         member, sprintStart, sprintEnd, holidays, leaves, configuredSprintDays
       );
