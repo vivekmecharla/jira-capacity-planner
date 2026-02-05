@@ -343,25 +343,36 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
             borderRadius: '8px',
             padding: '16px',
             zIndex: 1000,
-            minWidth: '350px',
-            maxWidth: '450px',
+            minWidth: '400px',
+            maxWidth: '650px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <a 
-                href={getJiraLink(jiraBaseUrl, task.key)} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="issue-key"
-                style={{ fontWeight: '600', fontSize: '14px' }}
-              >
-                {task.key} <ExternalLink size={12} />
-              </a>
-              <span className={`status-badge ${task.issueType === 'Bug' ? 'danger' : 'info'}`} style={{ fontSize: '10px' }}>
-                {task.issueType}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <a 
+                  href={getJiraLink(jiraBaseUrl, task.key)} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="issue-key"
+                  style={{ fontWeight: '600', fontSize: '14px' }}
+                >
+                  {task.key} <ExternalLink size={12} />
+                </a>
+                <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>- {task.summary}</span>
+                <span className={`status-badge ${task.issueType === 'Bug' ? 'danger' : 'info'}`} style={{ fontSize: '10px' }}>
+                  {task.issueType}
+                </span>
+              </div>
+              {task.parentKey && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  Parent: <a href={getJiraLink(jiraBaseUrl, task.parentKey)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>
+                    {task.parentKey}
+                  </a>
+                  {task.parentSummary && <span style={{ marginLeft: '4px' }}>- {task.parentSummary}</span>}
+                </div>
+              )}
             </div>
             <button 
               onClick={onClose}
@@ -371,22 +382,13 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                 cursor: 'pointer', 
                 fontSize: '18px',
                 color: 'var(--text-muted)',
-                padding: '4px'
+                padding: '4px',
+                marginLeft: '8px'
               }}
             >
               ×
             </button>
           </div>
-          <div style={{ fontSize: '13px', marginBottom: '12px', color: 'var(--text-primary)' }}>
-            {task.summary}
-          </div>
-          {task.parentKey && (
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-              Parent: <a href={getJiraLink(jiraBaseUrl, task.parentKey)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-blue)' }}>
-                {task.parentKey}
-              </a>
-            </div>
-          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
             <div>
               <span style={{ color: 'var(--text-muted)' }}>Estimate:</span>
@@ -549,7 +551,13 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
 
       {/* Timeline Grid */}
       <div className="card" style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: `${150 + timelineDates.length * 40}px` }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', minWidth: `${150 + timelineDates.length * 80}px` }}>
+          <colgroup>
+            <col style={{ width: '150px' }} />
+            {timelineDates.map((_, idx) => (
+              <col key={idx} style={{ width: '80px' }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               <th style={{ 
@@ -573,7 +581,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                     style={{ 
                       padding: '4px',
                       borderBottom: '1px solid var(--border-color)',
-                      minWidth: '40px',
+                      width: '80px',
                       textAlign: 'center',
                       fontSize: '10px',
                       background: holiday ? '#FFA500' : isToday ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
@@ -742,6 +750,29 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                               borderRadius = '0 4px 4px 0';
                             }
                             
+                            // Calculate how many days this task segment spans (for description display)
+                            const getSegmentDays = () => {
+                              let days = 1;
+                              // Count forward until break or end
+                              for (let i = idx + 1; i < timelineDates.length; i++) {
+                                const futureDate = timelineDates[i];
+                                const futurePos = getTaskPositionForDate(task, futureDate, i);
+                                if (!futurePos) break;
+                                const futureHoliday = getHolidayForDate(futureDate);
+                                const futureLeave = hasLeaveOnDate(accountId, futureDate);
+                                if (futureHoliday || futureLeave) break;
+                                days++;
+                                if (futurePos.isLast) break;
+                              }
+                              return days;
+                            };
+                            
+                            const segmentDays = showLabel ? getSegmentDays() : 0;
+                            const showDescription = showLabel && segmentDays >= 2;
+                            const displayText = showLabel 
+                              ? (showDescription ? `${task.key}: ${task.summary}` : task.key)
+                              : '';
+                            
                             return (
                               <div
                                 key={task.key + taskIdx}
@@ -749,7 +780,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                                 style={{
                                   background: taskColor,
                                   borderRadius: borderRadius,
-                                  padding: '3px 4px',
+                                  padding: '3px 6px',
                                   marginLeft: (isFirst || isContinuing) ? '2px' : '0',
                                   marginRight: (isLast || willBreak) ? '2px' : '0',
                                   fontSize: '9px',
@@ -767,7 +798,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                                 }}
                                 title={`${task.key}: ${task.summary}`}
                               >
-                                {showLabel ? task.key : ''}
+                                {displayText}
                               </div>
                             );
                           })}
