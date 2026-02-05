@@ -1,12 +1,58 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
-import { format, addDays, differenceInDays, isWithinInterval, parseISO, startOfDay } from 'date-fns';
+import { format, addDays, differenceInDays, isWithinInterval, parseISO, startOfDay, isSameDay } from 'date-fns';
+import { configApi } from '../api';
 
 const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
 
 function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
   const [selectedTask, setSelectedTask] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [holidays, setHolidays] = useState([]);
+  const [leaves, setLeaves] = useState([]);
+
+  // Fetch holidays and leaves data
+  useEffect(() => {
+    const fetchHolidaysAndLeaves = async () => {
+      try {
+        const [holidaysRes, leavesRes] = await Promise.all([
+          configApi.getHolidays(),
+          configApi.getLeaves()
+        ]);
+        setHolidays(holidaysRes.data || []);
+        setLeaves(leavesRes.data || []);
+      } catch (err) {
+        console.error('Failed to load holidays/leaves:', err);
+      }
+    };
+    fetchHolidaysAndLeaves();
+  }, []);
+
+  // Check if a date is a holiday
+  const getHolidayForDate = (date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return holidays.find(h => h.date === dateStr);
+  };
+
+  // Check if a member has leave on a specific date
+  const getLeaveForMemberOnDate = (accountId, date) => {
+    const dateStart = startOfDay(date);
+    return leaves.find(leave => {
+      if (leave.accountId !== accountId) return false;
+      try {
+        const leaveStart = startOfDay(parseISO(leave.startDate));
+        const leaveEnd = startOfDay(parseISO(leave.endDate));
+        return isWithinInterval(dateStart, { start: leaveStart, end: leaveEnd });
+      } catch (e) {
+        return false;
+      }
+    });
+  };
+
+  // Check if member has leave on a date (for task breaking)
+  const hasLeaveOnDate = (accountId, date) => {
+    return !!getLeaveForMemberOnDate(accountId, date);
+  };
 
   if (loading) {
     return (
@@ -212,6 +258,59 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
   // Get all unique tasks for a member (for consistent row ordering)
   const getAllTasksForMember = (tasks) => {
     return [...tasks].sort((a, b) => a.key.localeCompare(b.key));
+  };
+
+  // Check if task should show label on this date (first day or after a break)
+  const shouldShowTaskLabel = (task, date, dateIndex, accountId) => {
+    const position = getTaskPositionForDate(task, date, dateIndex);
+    if (!position) return false;
+    
+    // Always show on first day
+    if (position.isFirst) return true;
+    
+    // Check if previous day was a leave or holiday (task is resuming)
+    if (dateIndex > 0) {
+      const prevDate = timelineDates[dateIndex - 1];
+      if (prevDate) {
+        const hadLeave = hasLeaveOnDate(accountId, prevDate);
+        const hadHoliday = !!getHolidayForDate(prevDate);
+        if (hadLeave || hadHoliday) return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // Check if task continues after a break on this date
+  const isTaskContinuingAfterBreak = (task, date, dateIndex, accountId) => {
+    const position = getTaskPositionForDate(task, date, dateIndex);
+    if (!position || position.isFirst) return false;
+    
+    if (dateIndex > 0) {
+      const prevDate = timelineDates[dateIndex - 1];
+      if (prevDate) {
+        const hadLeave = hasLeaveOnDate(accountId, prevDate);
+        const hadHoliday = !!getHolidayForDate(prevDate);
+        return hadLeave || hadHoliday;
+      }
+    }
+    return false;
+  };
+
+  // Check if task will break after this date (next day is leave/holiday)
+  const willTaskBreakAfterDate = (task, date, dateIndex, accountId) => {
+    const position = getTaskPositionForDate(task, date, dateIndex);
+    if (!position || position.isLast) return false;
+    
+    if (dateIndex < timelineDates.length - 1) {
+      const nextDate = timelineDates[dateIndex + 1];
+      if (nextDate) {
+        const hasLeaveNext = hasLeaveOnDate(accountId, nextDate);
+        const hasHolidayNext = !!getHolidayForDate(nextDate);
+        return hasLeaveNext || hasHolidayNext;
+      }
+    }
+    return false;
   };
 
   // Modal/Popup component - click to open, click outside to close
@@ -426,8 +525,25 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
 
       {/* Legend - Note about colors */}
       <div className="card mb-4" style={{ padding: '12px' }}>
-        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-          <strong>Note:</strong> Each ticket has a unique color based on its key. Click on a ticket bar to view details. Bars span from start date to due date.
+        <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+          <span><strong>Legend:</strong></span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '16px', height: '16px', background: '#FFA500', borderRadius: '3px', display: 'inline-block' }}></span>
+            Holiday
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '16px', height: '16px', background: 'rgba(234, 179, 8, 0.3)', border: '2px solid var(--accent-yellow)', borderRadius: '3px', display: 'inline-block' }}></span>
+            Planned Leave
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '16px', height: '16px', background: 'rgba(239, 68, 68, 0.3)', border: '2px solid var(--accent-red)', borderRadius: '3px', display: 'inline-block' }}></span>
+            Unplanned Leave
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: '16px', height: '16px', background: 'rgba(59, 130, 246, 0.2)', borderRadius: '3px', display: 'inline-block' }}></span>
+            Today
+          </span>
+          <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>Click on a ticket bar to view details</span>
         </div>
       </div>
 
@@ -450,6 +566,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
               </th>
               {timelineDates.map((date, idx) => {
                 const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                const holiday = getHolidayForDate(date);
                 return (
                   <th 
                     key={idx}
@@ -459,8 +576,8 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                       minWidth: '40px',
                       textAlign: 'center',
                       fontSize: '10px',
-                      background: isToday ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
-                      color: 'var(--text-secondary)'
+                      background: holiday ? '#FFA500' : isToday ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                      color: holiday ? '#000' : 'var(--text-secondary)'
                     }}
                   >
                     <div>{format(date, 'EEE')}</div>
@@ -492,9 +609,93 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                 {(() => {
                   // Get all tasks sorted by key for consistent row ordering
                   const sortedTasks = getAllTasksForMember(tasks);
+                  const accountId = member.accountId;
                   
                   return timelineDates.map((date, idx) => {
                     const isToday = format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd');
+                    const holiday = getHolidayForDate(date);
+                    const memberLeave = getLeaveForMemberOnDate(accountId, date);
+                    
+                    // If it's a holiday, show holiday column
+                    if (holiday) {
+                      return (
+                        <td 
+                          key={idx}
+                          style={{ 
+                            padding: '0',
+                            borderBottom: '1px solid var(--border-color)',
+                            borderLeft: '1px solid var(--border-color)',
+                            verticalAlign: 'middle',
+                            background: '#FFA500',
+                            minHeight: '40px',
+                            position: 'relative'
+                          }}
+                        >
+                          <div style={{ 
+                            writingMode: 'vertical-rl',
+                            textOrientation: 'mixed',
+                            transform: 'rotate(180deg)',
+                            fontSize: '10px',
+                            fontWeight: '600',
+                            color: '#000',
+                            padding: '4px 2px',
+                            textAlign: 'center',
+                            width: '100%',
+                            height: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: `${Math.max(sortedTasks.length * 19, 40)}px`
+                          }}>
+                            {holiday.name}
+                          </div>
+                        </td>
+                      );
+                    }
+                    
+                    // If member has leave on this day
+                    if (memberLeave) {
+                      const isUnplanned = memberLeave.isUnplanned;
+                      const leaveColor = isUnplanned 
+                        ? 'rgba(239, 68, 68, 0.3)' // Red for unplanned
+                        : 'rgba(234, 179, 8, 0.3)'; // Yellow/amber for planned
+                      const leaveBorderColor = isUnplanned 
+                        ? 'var(--accent-red)' 
+                        : 'var(--accent-yellow)';
+                      const leaveTextColor = isUnplanned 
+                        ? 'var(--accent-red)' 
+                        : 'var(--accent-yellow)';
+                      
+                      return (
+                        <td 
+                          key={idx}
+                          style={{ 
+                            padding: '2px 0',
+                            borderBottom: '1px solid var(--border-color)',
+                            borderLeft: `2px solid ${leaveBorderColor}`,
+                            verticalAlign: 'top',
+                            background: leaveColor,
+                            minHeight: '40px'
+                          }}
+                        >
+                          <div style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            minHeight: `${Math.max(sortedTasks.length * 19, 40)}px`,
+                            fontSize: '9px',
+                            fontWeight: '600',
+                            color: leaveTextColor,
+                            textAlign: 'center',
+                            padding: '4px'
+                          }}>
+                            <div>{isUnplanned ? 'Unplanned' : 'Leave'}</div>
+                            {memberLeave.isHalfDay && <div style={{ fontSize: '8px' }}>(½ Day)</div>}
+                          </div>
+                        </td>
+                      );
+                    }
                     
                     return (
                       <td 
@@ -527,6 +728,19 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                             }
                             
                             const { isFirst, isLast } = position;
+                            const showLabel = shouldShowTaskLabel(task, date, idx, accountId);
+                            const isContinuing = isTaskContinuingAfterBreak(task, date, idx, accountId);
+                            const willBreak = willTaskBreakAfterDate(task, date, idx, accountId);
+                            
+                            // Determine border radius based on breaks
+                            let borderRadius = '0';
+                            if ((isFirst || isContinuing) && (isLast || willBreak)) {
+                              borderRadius = '4px';
+                            } else if (isFirst || isContinuing) {
+                              borderRadius = '4px 0 0 4px';
+                            } else if (isLast || willBreak) {
+                              borderRadius = '0 4px 4px 0';
+                            }
                             
                             return (
                               <div
@@ -534,10 +748,10 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                                 onClick={() => setSelectedTask(task)}
                                 style={{
                                   background: taskColor,
-                                  borderRadius: isFirst && isLast ? '4px' : isFirst ? '4px 0 0 4px' : isLast ? '0 4px 4px 0' : '0',
+                                  borderRadius: borderRadius,
                                   padding: '3px 4px',
-                                  marginLeft: isFirst ? '2px' : '0',
-                                  marginRight: isLast ? '2px' : '0',
+                                  marginLeft: (isFirst || isContinuing) ? '2px' : '0',
+                                  marginRight: (isLast || willBreak) ? '2px' : '0',
                                   fontSize: '9px',
                                   color: 'white',
                                   fontWeight: '600',
@@ -553,7 +767,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
                                 }}
                                 title={`${task.key}: ${task.summary}`}
                               >
-                                {isFirst ? task.key : ''}
+                                {showLabel ? task.key : ''}
                               </div>
                             );
                           })}
