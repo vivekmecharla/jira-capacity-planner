@@ -186,41 +186,50 @@ class JiraClient {
     // Format date for filtering (YYYY-MM-DD)
     const dateStr = date.toISOString().split('T')[0];
     
-    // Use the worklog updated API to get recently updated worklogs
-    // Then filter by user and date
-    // Calculate timestamp for start of the target date (in milliseconds since epoch)
+    // Create date range for the full day (00:00:00 to 23:59:59)
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
     
     try {
-      // Get worklogs updated since start of target date
-      // The API returns worklog IDs that were updated after the given timestamp
+      // Primary approach: Use the updated worklogs API to get worklogs updated in a wider time window
+      // to ensure we don't miss worklogs that were logged on the target date
+      const sinceDate = new Date(startOfDay);
+      sinceDate.setDate(sinceDate.getDate() - 7); // Look back 7 days to catch delayed updates
+      
       const updatedResponse = await client.get('/rest/api/3/worklog/updated', {
         params: {
-          since: startOfDay.getTime()
+          since: sinceDate.getTime()
         }
       });
       
       const worklogIds = (updatedResponse.data.values || []).map(v => v.worklogId);
       
-      if (worklogIds.length === 0) {
-        return [];
+      let allWorklogs = [];
+      if (worklogIds.length > 0) {
+        // Fetch worklog details in batches (API limit is 1000 per request)
+        const batchSize = 1000;
+        for (let i = 0; i < worklogIds.length; i += batchSize) {
+          const batch = worklogIds.slice(i, i + batchSize);
+          const worklogDetails = await client.post('/rest/api/3/worklog/list', {
+            ids: batch
+          });
+          allWorklogs = allWorklogs.concat(worklogDetails.data || []);
+        }
       }
       
-      // Fetch full worklog details for these IDs (batch of up to 1000)
-      const worklogDetails = await client.post('/rest/api/3/worklog/list', {
-        ids: worklogIds.slice(0, 1000)
-      });
-      
-      const allWorklogs = worklogDetails.data || [];
       const workLogs = [];
       
-      // Filter worklogs by author and date
+      // Filter worklogs by author and started date within the full day range
       for (const wl of allWorklogs) {
-        const wlDate = new Date(wl.started).toISOString().split('T')[0];
-        if (wl.author?.accountId === accountId && wlDate === dateStr) {
+        if (!wl.started || !wl.author?.accountId) continue;
+        
+        const wlStarted = new Date(wl.started);
+        const isWithinDayRange = wlStarted >= startOfDay && wlStarted <= endOfDay;
+        const isCorrectUser = wl.author.accountId === accountId;
+        
+        if (isWithinDayRange && isCorrectUser) {
           // Fetch issue details for this worklog
           try {
             const issueResponse = await client.get(`/rest/api/3/issue/${wl.issueId}`, {
@@ -247,6 +256,9 @@ class JiraClient {
           }
         }
       }
+      
+      // Sort by started time
+      workLogs.sort((a, b) => new Date(a.started) - new Date(b.started));
       
       return workLogs;
     } catch (err) {
