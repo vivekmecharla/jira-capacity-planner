@@ -607,7 +607,9 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                             >
                               <div style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{leave.memberName}</div>
                               <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>
-                                {leave.isHalfDay ? '½ day' : `${format(new Date(leave.startDate), 'MMM d')} - ${format(new Date(leave.endDate), 'MMM d')}`}
+                                {leave.isHalfDay 
+                                  ? `${format(new Date(leave.startDate), 'MMM d')} - ½ day` 
+                                  : `${format(new Date(leave.startDate), 'MMM d')} - ${format(new Date(leave.endDate), 'MMM d')}`}
                                 {leave.reason && ` (${leave.reason})`}
                                 {leave.isUnplanned && <span style={{ color: 'var(--accent-red)', fontWeight: '600' }}> [Unplanned]</span>}
                               </div>
