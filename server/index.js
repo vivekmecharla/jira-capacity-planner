@@ -38,6 +38,6 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, () => {
-  logger.info(`Server started on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  logger.info(`Server started on 0.0.0.0:${PORT}`);
 });
