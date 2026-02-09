@@ -117,7 +117,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     try {
       if (!members || members.length === 0) return [];
       return members.map(member => {
-        const assignedIssues = member?.work?.assignedIssues || [];
+        const assignedIssues = (member?.work?.assignedIssues || []).filter(issue => !issue.isCompletedBeforeSprint);
         const tasks = assignedIssues.map(issue => {
           // Parse dates from issue
           let dueDate = null;

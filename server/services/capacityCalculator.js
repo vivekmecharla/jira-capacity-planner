@@ -336,6 +336,24 @@ class CapacityCalculator {
       const statusName = issue.fields.status?.name || '';
       const isCompleted = completedStatuses.some(s => s.toLowerCase() === statusName.toLowerCase());
       
+      // Check if completed before sprint start
+      let isCompletedBeforeSprint = false;
+      let completedDate = null;
+      if (isCompleted && issue.changelog && issue.changelog.histories && sprintStartDate) {
+        for (const history of issue.changelog.histories) {
+          for (const item of history.items || []) {
+            if (item.field === 'status' && item.toString && completedStatuses.some(s => s.toLowerCase() === item.toString.toLowerCase())) {
+              completedDate = new Date(history.created);
+              if (completedDate < sprintStartDate) {
+                isCompletedBeforeSprint = true;
+              }
+              break;
+            }
+          }
+          if (completedDate) break;
+        }
+      }
+      
       // Skip Done issues if excludeDone flag is set (for Sprint Planning)
       if (excludeDone && isCompleted) {
         return; // Skip this issue entirely
@@ -465,6 +483,7 @@ class CapacityCalculator {
         hasSubtasks: childSubtasks.length > 0,
         isSubtask: issue.fields.issuetype?.subtask === true,
         isCompleted,
+        isCompletedBeforeSprint,
         startDate: startDate,
         dueDate: issue.fields.duedate || null,
         created: issue.fields.created || null

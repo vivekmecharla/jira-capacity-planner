@@ -66,7 +66,7 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     const parentMap = {}; // Store parent info for reference
     
     members.forEach(memberData => {
-      const assignedIssues = memberData?.work?.assignedIssues || [];
+      const assignedIssues = (memberData?.work?.assignedIssues || []).filter(issue => !issue.isCompletedBeforeSprint);
       assignedIssues.forEach(issue => {
         const issueWithAssignee = {
           ...issue,

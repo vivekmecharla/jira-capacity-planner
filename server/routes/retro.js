@@ -146,6 +146,31 @@ router.get('/sprint/:sprintId', async (req, res) => {
         ? prodCompletedStatuses.some(s => statusName.toLowerCase() === s || statusName.toLowerCase().includes(s))
         : techCompletedStatuses.some(s => statusName.toLowerCase().includes(s));
       
+      // Check if completed before sprint start
+      let isCompletedBeforeSprint = false;
+      let completedDate = null;
+      if (isCompleted && issue.changelog?.histories && sprintStartDate) {
+        for (const history of issue.changelog.histories) {
+          for (const item of history.items || []) {
+            if (item.field === 'status') {
+              const newStatus = item.toString?.toLowerCase() || '';
+              const isCompletedStatus = isBugOrProdIssue
+                ? prodCompletedStatuses.some(s => newStatus === s || newStatus.includes(s))
+                : techCompletedStatuses.some(s => newStatus.includes(s));
+              
+              if (isCompletedStatus) {
+                completedDate = new Date(history.created);
+                if (completedDate < sprintStartDate) {
+                  isCompletedBeforeSprint = true;
+                }
+                break;
+              }
+            }
+          }
+          if (completedDate) break;
+        }
+      }
+      
       // Calculate Dev and QA estimates
       let devEstimate = 0;
       let qaEstimate = 0;
@@ -202,7 +227,8 @@ router.get('/sprint/:sprintId', async (req, res) => {
         storyPoints: issue.fields.customfield_10016 || issue.fields.customfield_10026 || issue.fields.customfield_10004 || null,
         parentKey: issue.fields.parent?.key,
         isSubtask: issue.fields.issuetype?.subtask === true,
-        isCompleted
+        isCompleted,
+        isCompletedBeforeSprint
       };
     });
     

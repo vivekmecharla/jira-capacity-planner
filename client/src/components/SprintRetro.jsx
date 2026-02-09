@@ -80,6 +80,17 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
     hoursPerDay = 7 
   } = retroData;
 
+  // Filter out issues completed before sprint start
+  const filterIssues = (issues) => issues.filter(issue => !issue.isCompletedBeforeSprint);
+  
+  const filteredIssues = filterIssues(issues);
+  const filteredTechStories = filterIssues(techStories);
+  const filteredProductionIssues = filterIssues(productionIssues);
+  const filteredSubtasksByParent = {};
+  Object.keys(subtasksByParent).forEach(parentKey => {
+    filteredSubtasksByParent[parentKey] = filterIssues(subtasksByParent[parentKey]);
+  });
+
   const getStatusIcon = (issue) => {
     // Use isCompleted flag from backend if available
     if (issue.isCompleted) {
@@ -276,14 +287,14 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
 
   // Filter and sort all issues
   const filteredAllIssues = allFilter 
-    ? issues.filter(i => 
+    ? filteredIssues.filter(i => 
         i.key.toLowerCase().includes(allFilter.toLowerCase()) ||
         i.summary.toLowerCase().includes(allFilter.toLowerCase()) ||
         (i.status || '').toLowerCase().includes(allFilter.toLowerCase()) ||
         (i.issueType || '').toLowerCase().includes(allFilter.toLowerCase()) ||
         (i.assignee || '').toLowerCase().includes(allFilter.toLowerCase())
       )
-    : issues;
+    : filteredIssues;
   
   const getAllValue = (item, col) => {
     switch(col) {
@@ -439,11 +450,11 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
       </div>
 
       {/* Tech Stories Section */}
-      {techStories.length > 0 && (
+      {filteredTechStories.length > 0 && (
         <IssuesTable
           title="Tech Stories"
-          issues={techStories}
-          subtasksByParent={subtasksByParent}
+          issues={filteredTechStories}
+          subtasksByParent={filteredSubtasksByParent}
           type="techStories"
           hoursPerDay={hoursPerDay}
           showDueDate={true}
@@ -451,7 +462,7 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
           jiraBaseUrl={jiraBaseUrl}
         />
       )}
-      {techStories.length === 0 && (
+      {filteredTechStories.length === 0 && (
         <div className="card mb-4">
           <h3 className="card-title">Tech Stories (0)</h3>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No tech stories in this sprint</div>
@@ -459,11 +470,11 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
       )}
 
       {/* Production Issues Section */}
-      {productionIssues.length > 0 && (
+      {filteredProductionIssues.length > 0 && (
         <IssuesTable
           title="Production Issues / Bugs"
-          issues={productionIssues}
-          subtasksByParent={subtasksByParent}
+          issues={filteredProductionIssues}
+          subtasksByParent={filteredSubtasksByParent}
           type="productionIssues"
           hoursPerDay={hoursPerDay}
           showDueDate={true}
@@ -471,7 +482,7 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
           jiraBaseUrl={jiraBaseUrl}
         />
       )}
-      {productionIssues.length === 0 && (
+      {filteredProductionIssues.length === 0 && (
         <div className="card mb-4">
           <h3 className="card-title">Production Issues / Bugs (0)</h3>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No production issues in this sprint</div>
@@ -493,7 +504,7 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="card-title" style={{ margin: 0 }}>
-              All Sprint Issues ({issues.length}){allFilter && ` - showing ${sortedAllIssues.length}`}
+              All Sprint Issues ({filteredIssues.length}){allFilter && ` - showing ${sortedAllIssues.length}`}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

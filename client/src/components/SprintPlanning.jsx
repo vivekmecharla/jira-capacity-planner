@@ -237,7 +237,10 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
         {/* Left Column - Charts and Collapsible Sections */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {(() => {
-            const allIssues = members.flatMap(m => m.work.assignedIssues);
+            // Filter out issues completed before sprint start
+            const filterIssues = (issues) => issues.filter(issue => !issue.isCompletedBeforeSprint);
+            
+            const allIssues = members.flatMap(m => filterIssues(m.work.assignedIssues));
             const parentIssues = allIssues.filter(i => !i.isSubtask);
             const carryoverCount = parentIssues.filter(i => i.isCarryover).length;
             const techStoriesAll = parentIssues.filter(i => 
@@ -822,7 +825,7 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                                 </tr>
                               </thead>
                               <tbody>
-                                {item.work.assignedIssues.map(issue => {
+                                {item.work.assignedIssues.filter(issue => !issue.isCompletedBeforeSprint).map(issue => {
                                   // Calculate committed effort for this task (remaining + work logged in sprint)
                                   // All tickets (including late additions) count remaining + logged work
                                   const workLoggedInSprint = issue.workLogged || 0;
@@ -929,7 +932,10 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
 
       {/* Tech Stories Section */}
       {(() => {
-        const allIssues = members.flatMap(m => m.work.assignedIssues);
+        // Filter out issues completed before sprint start
+        const filterIssues = (issues) => issues.filter(issue => !issue.isCompletedBeforeSprint);
+        
+        const allIssues = members.flatMap(m => filterIssues(m.work.assignedIssues));
         const techStoriesRaw = allIssues.filter(i => 
           i.issueType === 'Story' || i.issueType === 'Task' || i.issueType === 'Technical Task'
         );
@@ -964,7 +970,10 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
 
       {/* Production Issues / Bugs Section */}
       {(() => {
-        const allIssues = members.flatMap(m => m.work.assignedIssues);
+        // Filter out issues completed before sprint start
+        const filterIssues = (issues) => issues.filter(issue => !issue.isCompletedBeforeSprint);
+        
+        const allIssues = members.flatMap(m => filterIssues(m.work.assignedIssues));
         const productionIssuesRaw = allIssues.filter(i => 
           (i.issueType === 'Bug' || i.issueType === 'Incident' || i.issueType === 'Production Issue') && !i.isSubtask
         );
