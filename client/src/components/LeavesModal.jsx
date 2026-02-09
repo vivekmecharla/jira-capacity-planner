@@ -20,6 +20,7 @@ const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
     startDate: leave?.startDate || new Date().toISOString().split('T')[0],
     endDate: leave?.endDate || new Date().toISOString().split('T')[0],
     isHalfDay: leave?.isHalfDay || false,
+    halfDayType: leave?.halfDayType || '',
     isUnplanned: leave?.isUnplanned || false,
     reason: leave?.reason || ''
   });
@@ -106,7 +107,7 @@ const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
           <input
             type="checkbox"
             checked={formData.isHalfDay}
-            onChange={(e) => setFormData({ ...formData, isHalfDay: e.target.checked })}
+            onChange={(e) => setFormData({ ...formData, isHalfDay: e.target.checked, halfDayType: e.target.checked ? formData.halfDayType : '' })}
             style={{ margin: 0 }}
           />
           Half Day
@@ -121,6 +122,38 @@ const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
           Unplanned
         </label>
       </div>
+
+      {formData.isHalfDay && (
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>
+            Which half of the day?
+          </label>
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="halfDayType"
+                value="first"
+                checked={formData.halfDayType === 'first'}
+                onChange={(e) => setFormData({ ...formData, halfDayType: e.target.value })}
+                style={{ margin: 0 }}
+              />
+              1st Half
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="halfDayType"
+                value="second"
+                checked={formData.halfDayType === 'second'}
+                onChange={(e) => setFormData({ ...formData, halfDayType: e.target.value })}
+                style={{ margin: 0 }}
+              />
+              2nd Half
+            </label>
+          </div>
+        </div>
+      )}
 
       <div>
         <label style={{ display: 'block', marginBottom: '4px', fontSize: '12px', fontWeight: '600', color: 'var(--text-primary)' }}>
@@ -366,7 +399,7 @@ function LeavesModal({ isOpen, onClose, onLeavesChanged }) {
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                         {formatDate(leave.startDate)} - {formatDate(leave.endDate)}
-                        {leave.isHalfDay && ' (½ Day)'}
+                        {leave.isHalfDay && ` (½ Day${leave.halfDayType ? ` ${leave.halfDayType === 'first' ? '1st half' : '2nd half'}` : ''})`}
                         {leave.isUnplanned && ' - Unplanned'}
                       </div>
                       {leave.reason && (

@@ -1,9 +1,43 @@
 const express = require('express');
 const router = express.Router();
 const jiraClient = require('../services/jiraClient');
+const database = require('../services/database');
 const { createLogger } = require('../utils/logger');
 
 const logger = createLogger('JiraRoutes');
+
+// Helper function to find the appropriate working day for a user (accounting for leave)
+function getUserWorkingDay(accountId) {
+  const leaves = database.getLeaves();
+  let checkDate = jiraClient.getLastWorkingDay();
+  const maxDaysBack = 30; // Prevent infinite loops
+  
+  for (let daysBack = 0; daysBack < maxDaysBack; daysBack++) {
+    const dateString = checkDate.toISOString().split('T')[0];
+    
+    // Check if user was on leave this day (full day or first half day leave)
+    const wasOnLeave = leaves.some(leave => {
+      const leaveStart = leave.startDate;
+      const leaveEnd = leave.endDate || leave.startDate;
+      const memberMatch = leave.accountId === accountId || leave.memberName === accountId;
+      return memberMatch && leaveStart <= dateString && leaveEnd >= dateString && (!leave.isHalfDay || leave.halfDayType === 'first');
+    });
+    
+    if (!wasOnLeave) {
+      return checkDate;
+    }
+    
+    // Move to previous working day (skip weekends)
+    checkDate = new Date(checkDate);
+    checkDate.setDate(checkDate.getDate() - 1);
+    while (checkDate.getDay() === 0 || checkDate.getDay() === 6) { // Skip Sunday (0) and Saturday (6)
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+  }
+  
+  // Fallback to original date if no non-leave day found
+  return jiraClient.getLastWorkingDay();
+}
 
 // Get Jira base URL for frontend links
 router.get('/baseUrl', (req, res) => {
@@ -144,22 +178,22 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// Get user's worklogs for the last working day
+// Get user's worklogs for the last working day (accounting for leave)
 router.get('/users/:accountId/worklogs', async (req, res) => {
   try {
     const { accountId } = req.params;
     const { projectKey } = req.query;
     
-    // Get last working day (skip weekends)
-    const lastWorkingDay = jiraClient.getLastWorkingDay();
+    // Get appropriate working day for user (accounting for leave)
+    const workingDay = getUserWorkingDay(accountId);
     
     logger.info('Fetching worklogs for user', { 
       accountId, 
-      date: lastWorkingDay.toISOString().split('T')[0],
+      date: workingDay.toISOString().split('T')[0],
       projectKey 
     });
     
-    const workLogs = await jiraClient.getUserWorkLogsForDate(accountId, lastWorkingDay, projectKey);
+    const workLogs = await jiraClient.getUserWorkLogsForDate(accountId, workingDay, projectKey);
     
     // Calculate summary
     const totalSeconds = workLogs.reduce((sum, wl) => sum + (wl.timeSpent || 0), 0);
@@ -174,7 +208,7 @@ router.get('/users/:accountId/worklogs', async (req, res) => {
     res.json({
       workLogs,
       summary: {
-        lastWorkingDate: lastWorkingDay.toISOString().split('T')[0],
+        lastWorkingDate: workingDay.toISOString().split('T')[0],
         count: workLogs.length,
         totalHours: parseFloat(totalHours.toFixed(2))
       }

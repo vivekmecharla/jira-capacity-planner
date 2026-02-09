@@ -14,7 +14,7 @@ function HolidaysLeaves() {
   const [showHolidayModal, setShowHolidayModal] = useState(false);
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [newHoliday, setNewHoliday] = useState({ name: '', date: '' });
-  const [newLeave, setNewLeave] = useState({ accountId: '', startDate: '', endDate: '', reason: '', isHalfDay: false, isUnplanned: false });
+  const [newLeave, setNewLeave] = useState({ accountId: '', startDate: '', endDate: '', reason: '', isHalfDay: false, halfDayType: '', isUnplanned: false });
   const [showManageLeavesModal, setShowManageLeavesModal] = useState(false);
 
   useEffect(() => {
@@ -85,7 +85,7 @@ function HolidaysLeaves() {
         ...newLeave,
         memberName: member?.displayName
       });
-      setNewLeave({ accountId: '', startDate: '', endDate: '', reason: '', isHalfDay: false, isUnplanned: false });
+      setNewLeave({ accountId: '', startDate: '', endDate: '', reason: '', isHalfDay: false, halfDayType: '', isUnplanned: false });
       setShowLeaveModal(false);
       loadData();
     } catch (err) {
@@ -227,7 +227,9 @@ function HolidaysLeaves() {
                           <span className="status-badge danger" style={{ marginLeft: '8px', fontSize: '10px' }}>Unplanned</span>
                         )}
                         {leave.isHalfDay && (
-                          <span className="status-badge warning" style={{ marginLeft: '8px', fontSize: '10px' }}>½ Day</span>
+                          <span className="status-badge warning" style={{ marginLeft: '8px', fontSize: '10px' }}>
+                            ½ Day {leave.halfDayType ? `(${leave.halfDayType === 'first' ? '1st half' : '2nd half'})` : ''}
+                          </span>
                         )}
                       </div>
                       <div className="leave-date" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
@@ -362,7 +364,7 @@ function HolidaysLeaves() {
                 <input
                   type="checkbox"
                   checked={newLeave.isHalfDay}
-                  onChange={(e) => setNewLeave({ ...newLeave, isHalfDay: e.target.checked })}
+                  onChange={(e) => setNewLeave({ ...newLeave, isHalfDay: e.target.checked, halfDayType: e.target.checked ? newLeave.halfDayType : '' })}
                   style={{ marginRight: '8px' }}
                 />
                 Half Day Leave
@@ -370,6 +372,35 @@ function HolidaysLeaves() {
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
                 Check this if the leave is for only half a day (4 hours)
               </div>
+              {newLeave.isHalfDay && (
+                <div style={{ marginTop: '8px' }}>
+                  <label className="form-label" style={{ fontSize: '12px', marginBottom: '4px' }}>Which half of the day?</label>
+                  <div style={{ display: 'flex', gap: '16px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
+                      <input
+                        type="radio"
+                        name="halfDayType"
+                        value="first"
+                        checked={newLeave.halfDayType === 'first'}
+                        onChange={(e) => setNewLeave({ ...newLeave, halfDayType: e.target.value })}
+                        style={{ marginRight: '4px' }}
+                      />
+                      1st Half
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
+                      <input
+                        type="radio"
+                        name="halfDayType"
+                        value="second"
+                        checked={newLeave.halfDayType === 'second'}
+                        onChange={(e) => setNewLeave({ ...newLeave, halfDayType: e.target.value })}
+                        style={{ marginRight: '4px' }}
+                      />
+                      2nd Half
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="form-group">
