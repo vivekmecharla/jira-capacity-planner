@@ -31,6 +31,7 @@ A comprehensive sprint management tool that integrates with Jira to provide capa
 - **Late Additions Tracking**: Highlight tickets added mid-sprint
 - **Overdue Analysis**: Track days overdue for incomplete tickets
 - **Completion Rates**: Percentage completion metrics per category
+- **Member-wise Breakdown**: Issues grouped by team member, then by parent story with subtasks
 
 ### Issue Management
 - **Tech Stories Table**: Stories, Tasks, and Technical Tasks with Dev/QA estimate columns
@@ -174,6 +175,7 @@ Access the application:
 1. Navigate to the **Sprint Retro** tab
 2. Review committed vs completed metrics
 3. Analyze late additions and overdue items
+4. **Member-wise Breakdown**: View all issues grouped by team member, then by parent story
 
 ## Capacity Calculation
 

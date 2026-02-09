@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle, Clock, XCircle, AlertCircle, ChevronDown, C
 import { format } from 'date-fns';
 import { jiraApi, configApi } from '../api';
 import IssuesTable from './IssuesTable';
+import MemberIssuesTable from './MemberIssuesTable';
 import LeavesModal from './LeavesModal';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
@@ -502,6 +503,19 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '', boardId = null }
           <h3 className="card-title">Production Issues / Bugs (0)</h3>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>No production issues in this sprint</div>
         </div>
+      )}
+
+      {/* Member-wise Issues Section */}
+      {filteredIssues.length > 0 && (
+        <MemberIssuesTable
+          title="Member-wise Breakdown"
+          issues={[...filteredTechStories, ...filteredProductionIssues]}
+          subtasksByParent={filteredSubtasksByParent}
+          hoursPerDay={hoursPerDay}
+          showDueDate={true}
+          showDelay={true}
+          jiraBaseUrl={jiraBaseUrl}
+        />
       )}
 
       {/* All Issues with Late Additions Highlighted - Collapsible */}
