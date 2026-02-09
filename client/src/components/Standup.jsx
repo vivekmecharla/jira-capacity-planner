@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ExternalLink, User } from 'lucide-react';
+import { ExternalLink, User, Settings } from 'lucide-react';
 import UserWorkLogs from './UserWorkLogs';
+import LeavesModal from './LeavesModal';
 import { configApi } from '../api';
 
 const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
@@ -10,6 +11,7 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
   const [leaves, setLeaves] = useState([]);
   const [leavesLoading, setLeavesLoading] = useState(true);
+  const [showLeavesModal, setShowLeavesModal] = useState(false);
 
   // Fetch leave data on component mount
   useEffect(() => {
@@ -158,7 +160,6 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     return groupedByParent;
   }, [filteredSubtasks]);
 
-  // Time tracking progress bar component
   const TimeTrackingBar = ({ logged, remaining, estimate }) => {
     const total = logged + remaining;
     const loggedPercent = total > 0 ? (logged / total) * 100 : 0;
@@ -426,7 +427,26 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
         
         {/* Today's Leaves Section */}
         <div className="standup-leaves-section">
-          <h4>Today's Leaves</h4>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <h4 style={{ margin: 0 }}>Today's Leaves</h4>
+            <button
+              onClick={() => setShowLeavesModal(true)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-muted)',
+                padding: '4px',
+                borderRadius: '4px',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => e.target.style.background = 'var(--bg-tertiary)'}
+              onMouseOut={(e) => e.target.style.background = 'none'}
+              title="Edit leaves"
+            >
+              <Settings size={14} />
+            </button>
+          </div>
           {leavesLoading ? (
             <div className="leaves-loading">
               <div className="spinner-small"></div>
@@ -471,6 +491,20 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
           />
         </div>
       )}
+      
+      {/* Leaves Modal */}
+      <LeavesModal 
+        isOpen={showLeavesModal} 
+        onClose={() => setShowLeavesModal(false)}
+        onLeavesChanged={async () => {
+          try {
+            const response = await configApi.getLeaves();
+            setLeaves(response.data || []);
+          } catch (error) {
+            console.error('Error refreshing leaves:', error);
+          }
+        }}
+      />
       
       <style>{`
         .standup-container {

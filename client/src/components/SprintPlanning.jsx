@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, Filter, X, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronUp, ExternalLink, Filter, X, Maximize2, Minimize2, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import IssuesTable from './IssuesTable';
+import LeavesModal from './LeavesModal';
 
 function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraBaseUrl = '' }) {
   const [expandedMembers, setExpandedMembers] = useState({});
@@ -10,6 +11,7 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
   // Collapsible section states
   const [showTeamMembers, setShowTeamMembers] = useState(false);
   const [showLeaves, setShowLeaves] = useState(false);
+  const [showLeavesModal, setShowLeavesModal] = useState(false);
   
   // Sort and filter state for Team Capacity table
   const [teamSort, setTeamSort] = useState({ column: null, direction: 'asc' });
@@ -214,6 +216,7 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
   };
 
   return (
+    <>
     <div>
       {/* Sprint Info */}
       <div className="card mb-4">
@@ -587,9 +590,30 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                       {showLeaves ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                       Leaves in Sprint
                     </h3>
-                    <span style={{ fontSize: '14px', fontWeight: '600', color: allLeaves.length > 0 ? 'var(--accent-orange)' : 'var(--text-muted)' }}>
-                      {allLeaves.length}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: allLeaves.length > 0 ? 'var(--accent-orange)' : 'var(--text-muted)' }}>
+                        {allLeaves.length}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setShowLeavesModal(true); }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)',
+                          padding: '4px',
+                          borderRadius: '4px',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                        onMouseOut={(e) => e.currentTarget.style.background = 'none'}
+                        title="Edit leaves"
+                      >
+                        <Settings size={14} />
+                      </button>
+                    </div>
                   </div>
                   {showLeaves && (
                     <div style={{ marginTop: '12px' }}>
@@ -1005,6 +1029,12 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
         );
       })()}
     </div>
+    <LeavesModal
+        isOpen={showLeavesModal}
+        onClose={() => setShowLeavesModal(false)}
+        onLeavesChanged={onRefresh}
+      />
+    </>
   );
 }
 

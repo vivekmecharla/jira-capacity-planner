@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, User, RefreshCw, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Calendar, User, RefreshCw, AlertCircle, CheckCircle, Settings } from 'lucide-react';
 import { configApi } from '../api';
 import { format } from 'date-fns';
+import LeavesModal from './LeavesModal';
 
 function HolidaysLeaves() {
   const [holidays, setHolidays] = useState([]);
@@ -14,6 +15,7 @@ function HolidaysLeaves() {
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [newHoliday, setNewHoliday] = useState({ name: '', date: '' });
   const [newLeave, setNewLeave] = useState({ accountId: '', startDate: '', endDate: '', reason: '', isHalfDay: false, isUnplanned: false });
+  const [showManageLeavesModal, setShowManageLeavesModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -184,18 +186,20 @@ function HolidaysLeaves() {
 
         {/* Leaves Section */}
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <h3 className="card-title">
               <User size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
               Team Leaves
             </h3>
-            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              {leaves.length} leaves
-            </span>
-            <button className="btn btn-primary btn-sm" onClick={() => setShowLeaveModal(true)}>
-              <Plus size={14} />
-              Add Leave
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <button className="btn btn-secondary btn-sm"
+                onClick={() => setShowManageLeavesModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+              >
+                <Settings size={14} />
+                Manage
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -209,7 +213,7 @@ function HolidaysLeaves() {
           ) : (
             <div className="leave-list">
               {leaves
-                .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+                .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
                 .map(leave => (
                   <div 
                     key={leave.id} 
@@ -394,6 +398,12 @@ function HolidaysLeaves() {
           </div>
         </div>
       )}
+
+      <LeavesModal
+        isOpen={showManageLeavesModal}
+        onClose={() => setShowManageLeavesModal(false)}
+        onLeavesChanged={loadData}
+      />
     </>
   );
 }

@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { ExternalLink, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ExternalLink, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import { format, addDays, differenceInDays, isWithinInterval, parseISO, startOfDay, isSameDay } from 'date-fns';
 import { configApi } from '../api';
+import LeavesModal from './LeavesModal';
 
 const getJiraLink = (baseUrl, issueKey) => `${baseUrl}/browse/${issueKey}`;
 
@@ -10,6 +11,7 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [holidays, setHolidays] = useState([]);
   const [leaves, setLeaves] = useState([]);
+  const [showLeavesModal, setShowLeavesModal] = useState(false);
 
   // Fetch holidays and leaves data
   useEffect(() => {
@@ -521,6 +523,14 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
             >
               <ChevronRight size={16} />
             </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowLeavesModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <Settings size={14} />
+              Manage Leaves
+            </button>
           </div>
         </div>
       </div>
@@ -817,6 +827,22 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
       {selectedTask && (
         <TaskPopup task={selectedTask} onClose={() => setSelectedTask(null)} />
       )}
+      <LeavesModal
+        isOpen={showLeavesModal}
+        onClose={() => setShowLeavesModal(false)}
+        onLeavesChanged={async () => {
+          try {
+            const [holidaysRes, leavesRes] = await Promise.all([
+              configApi.getHolidays(),
+              configApi.getLeaves()
+            ]);
+            setHolidays(holidaysRes.data || []);
+            setLeaves(leavesRes.data || []);
+          } catch (err) {
+            console.error('Failed to refresh holidays/leaves:', err);
+          }
+        }}
+      />
     </div>
   );
 }

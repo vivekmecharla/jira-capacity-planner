@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle, Clock, XCircle, AlertCircle, ChevronDown, ChevronUp, ChevronRight, Filter, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, XCircle, AlertCircle, ChevronDown, ChevronUp, ChevronRight, Filter, X, Settings } from 'lucide-react';
 import { format } from 'date-fns';
-import { jiraApi } from '../api';
+import { jiraApi, configApi } from '../api';
 import IssuesTable from './IssuesTable';
+import LeavesModal from './LeavesModal';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
 function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
@@ -20,6 +21,7 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
   
   // State for collapsible All Sprint Issues section
   const [showAllIssues, setShowAllIssues] = useState(false);
+  const [showLeavesModal, setShowLeavesModal] = useState(false);
 
   useEffect(() => {
     if (sprint?.id) {
@@ -311,6 +313,19 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
 
   return (
     <div>
+      {/* Header with Sprint Info and Manage Leaves Button */}
+      <div className="card mb-4" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: '600', margin: 0 }}>{sprintInfo?.name || 'Sprint Retrospective'}</h2>
+        <button
+          className="btn btn-secondary"
+          onClick={() => setShowLeavesModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+        >
+          <Settings size={14} />
+          Manage Leaves
+        </button>
+      </div>
+
       {/* Charts Row - Bar Charts for Story Points and Tickets, Pie Chart for Categories */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: '16px', marginBottom: '16px' }}>
         {/* Story Points Bar Chart */}
@@ -580,6 +595,18 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
           </>
         )}
       </div>
+
+      <LeavesModal
+        isOpen={showLeavesModal}
+        onClose={() => setShowLeavesModal(false)}
+        onLeavesChanged={async () => {
+          try {
+            await configApi.getLeaves();
+          } catch (err) {
+            console.error('Failed to refresh leaves:', err);
+          }
+        }}
+      />
     </div>
   );
 }
