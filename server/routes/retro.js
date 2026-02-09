@@ -28,8 +28,18 @@ router.get('/sprint/:sprintId', async (req, res) => {
     
     const sprintStartDate = new Date(sprint.startDate);
     
-    // Get team members for role lookup
-    const teamMembers = database.getTeamMembers();
+    // Get team members for role lookup, optionally filtered by board
+    const { boardId } = req.query;
+    let teamMembers = database.getTeamMembers();
+    
+    if (boardId) {
+      const boardIdNum = parseInt(boardId);
+      teamMembers = teamMembers.filter(m => {
+        if (!m.boardAssignments || m.boardAssignments.length === 0) return true;
+        return m.boardAssignments.some(ba => ba.boardId === boardIdNum);
+      });
+    }
+    
     const memberRoles = {};
     teamMembers.forEach(member => {
       memberRoles[member.accountId] = member.role || 'Developer';

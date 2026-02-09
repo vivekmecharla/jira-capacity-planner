@@ -6,7 +6,7 @@ import IssuesTable from './IssuesTable';
 import LeavesModal from './LeavesModal';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
-function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
+function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '', boardId = null }) {
   const [retroData, setRetroData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -27,13 +27,13 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '' }) {
     if (sprint?.id) {
       loadRetroData(sprint.id);
     }
-  }, [sprint]);
+  }, [sprint, boardId]);
 
   const loadRetroData = async (sprintId) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await jiraApi.getSprintRetro(sprintId);
+      const response = await jiraApi.getSprintRetro(sprintId, boardId);
       setRetroData(response.data);
     } catch (err) {
       setError('Failed to load retrospective data');

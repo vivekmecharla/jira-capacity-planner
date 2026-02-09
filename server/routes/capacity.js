@@ -27,8 +27,18 @@ router.get('/sprint/:sprintId', async (req, res) => {
       hasMore = result.issues.length === 100;
     }
     
-    // Get team members from config
-    const teamMembers = database.getTeamMembers();
+    // Get team members from config, optionally filtered by board
+    const { boardId } = req.query;
+    let teamMembers = database.getTeamMembers();
+    
+    if (boardId) {
+      const boardIdNum = parseInt(boardId);
+      teamMembers = teamMembers.filter(m => {
+        // If member has no board assignments, include them in all boards (backward compatible)
+        if (!m.boardAssignments || m.boardAssignments.length === 0) return true;
+        return m.boardAssignments.some(ba => ba.boardId === boardIdNum);
+      });
+    }
     
     // Calculate team capacity (now async - fetches holidays/leaves from Zoho)
     const teamCapacity = await capacityCalculator.calculateTeamCapacity(
@@ -104,7 +114,15 @@ router.get('/board/:boardId/summary', async (req, res) => {
     const { state } = req.query;
     
     const sprints = await jiraClient.getSprints(boardId, state || 'active,future');
-    const teamMembers = database.getTeamMembers();
+    let teamMembers = database.getTeamMembers();
+    
+    const boardIdNum = parseInt(boardId);
+    if (boardIdNum) {
+      teamMembers = teamMembers.filter(m => {
+        if (!m.boardAssignments || m.boardAssignments.length === 0) return true;
+        return m.boardAssignments.some(ba => ba.boardId === boardIdNum);
+      });
+    }
     
     const summaries = await Promise.all(sprints.map(async (sprint) => {
       try {

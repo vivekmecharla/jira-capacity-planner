@@ -57,7 +57,7 @@ function App() {
     if (selectedSprint) {
       loadPlanningData(selectedSprint.id);
     }
-  }, [selectedSprint]);
+  }, [selectedSprint, selectedBoard]);
 
   const checkConnection = async () => {
     try {
@@ -148,7 +148,7 @@ function App() {
     setError(null);
     setPlanningData(null); // Clear old data to prevent stale data issues
     try {
-      const response = await capacityApi.getSprintPlanning(sprintId);
+      const response = await capacityApi.getSprintPlanning(sprintId, selectedBoard?.id || null);
       setPlanningData(response.data);
     } catch (err) {
       setError('Failed to load planning data. Make sure team members are configured.');
@@ -201,6 +201,7 @@ function App() {
             sprint={selectedSprint}
             selectedBoard={selectedBoard}
             jiraBaseUrl={jiraBaseUrl}
+            boardId={selectedBoard?.id}
           />
         );
       case 'timeline':

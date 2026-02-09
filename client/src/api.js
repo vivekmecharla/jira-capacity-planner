@@ -58,13 +58,15 @@ export const configApi = {
 
 // Capacity API
 export const capacityApi = {
-  getSprintPlanning: (sprintId) => api.get(`/capacity/sprint/${sprintId}`),
+  getSprintPlanning: (sprintId, boardId = null) => 
+    api.get(`/capacity/sprint/${sprintId}`, { params: boardId ? { boardId } : {} }),
   getBoardSummary: (boardId, state) => 
     api.get(`/capacity/board/${boardId}/summary`, { params: { state } })
 };
 
 // Add retro API to jiraApi
-jiraApi.getSprintRetro = (sprintId) => api.get(`/retro/sprint/${sprintId}`);
+jiraApi.getSprintRetro = (sprintId, boardId = null) => 
+  api.get(`/retro/sprint/${sprintId}`, { params: boardId ? { boardId } : {} });
 
 // Add user worklogs API
 jiraApi.getUserWorkLogs = (accountId, projectKey = null) => 
