@@ -621,7 +621,9 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No planned leaves</div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
-                          {allLeaves.map((leave, index) => (
+                          {allLeaves
+                            .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
+                            .map((leave, index) => (
                             <div 
                               key={`${leave.memberAccountId}-${leave.id}-${index}`}
                               style={{ 
