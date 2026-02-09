@@ -41,9 +41,17 @@ A comprehensive sprint management tool that integrates with Jira to provide capa
 
 ### Team & Configuration
 - **Team Member Management**: Add/remove team members with role assignments (Developer, QA, Dev Lead, QA Lead, Sprint Head)
+- **Board Assignments**: Assign team members to specific boards/projects for filtered capacity planning
+- **Board-Based Filtering**: View only team members assigned to the selected board across all features
 - **Holiday Calendar**: Configure company-wide holidays
-- **Leave Management**: Track individual team member leaves
+- **Leave Management**: Track individual team member leaves with sorting and editing capabilities
 - **Sprint Settings**: Configure working days per sprint and hours per day
+
+### Leave Management Features
+- **Universal Leave Editor**: Edit leaves directly from any page (Standup, Sprint Planning, Active Sprint, Sprint Retro, Timeline, Holidays & Leaves)
+- **Leave Sorting**: Automatic sorting by date (latest first) across all leave displays
+- **Worklog Leave Check**: Automatically fetches work logs from the previous working day if user was on leave
+- **Smart Leave Detection**: Considers full-day leave and first-half-day leave when determining work log dates
 
 ### Server-Side Logging
 - **Structured Logging**: All API requests and errors logged with timestamps
@@ -125,10 +133,13 @@ Access the application:
 1. **Configure Team Members** (Team tab)
    - Add team members from your Jira project
    - Assign roles (Developer, QA, Dev Lead, QA Lead, Sprint Head)
+   - **Assign team members to specific boards** for filtered capacity planning
+   - Use the Edit button to assign members to multiple boards/projects
 
 2. **Add Holidays** (Holidays & Leaves tab)
    - Add company-wide holidays
    - Add individual team member leaves
+   - **Edit leaves directly** from any page using the manage leaves button
 
 3. **Sprint Settings** (Settings tab)
    - Set working days per sprint (default: 8)
@@ -138,9 +149,11 @@ Access the application:
 
 1. Select your **Project**, **Board**, and **Sprint** from the header dropdowns
 2. View the **Sprint Planning** tab for:
-   - Team capacity pie charts
-   - Per-member capacity vs committed work
+   - Team capacity pie charts (filtered by selected board)
+   - Per-member capacity vs committed work (only members assigned to board)
    - Tech Stories and Production Issues tables
+
+**Note**: When a board is selected, only team members assigned to that board are shown in capacity calculations and planning data.
 
 ### 3. Team Timeline
 
@@ -218,8 +231,9 @@ Subtasks are classified based on:
 - `GET/PUT /api/config/sprint` - Sprint settings
 
 ### Data
-- `GET /api/capacity/sprint/:id` - Sprint planning data
-- `GET /api/retro/sprint/:id` - Retrospective data
+- `GET /api/capacity/sprint/:id?boardId=X` - Sprint planning data (filtered by board)
+- `GET /api/retro/sprint/:id?boardId=X` - Retrospective data (filtered by board)
+- `GET /api/jira/users/:accountId/worklogs` - User work logs with leave-aware date calculation
 
 ## Troubleshooting
 
@@ -230,6 +244,15 @@ Subtasks are classified based on:
 
 ### "No team members configured"
 - Add team members in the Team tab first
+- If a board is selected, ensure team members are assigned to that board
+
+### "No team members assigned to this board"
+- Edit team members to assign them to the selected board
+- Members without board assignments appear in all boards (backward compatible)
+
+### Work logs showing wrong date
+- Check if the team member was on leave on the previous working day
+- The system automatically fetches work logs from the last non-leave working day
 
 ### Missing estimates or dates
 - Ensure subtasks have Original Estimate, Start Date, and Due Date in Jira
