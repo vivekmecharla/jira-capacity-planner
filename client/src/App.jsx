@@ -202,6 +202,7 @@ function App() {
             selectedBoard={selectedBoard}
             jiraBaseUrl={jiraBaseUrl}
             boardId={selectedBoard?.id}
+            planningData={planningData}
           />
         );
       case 'timeline':

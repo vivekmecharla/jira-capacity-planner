@@ -18,6 +18,9 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
   const [teamFilter, setTeamFilter] = useState('');
   const [showTeamFilter, setShowTeamFilter] = useState(false);
   
+  // Toggle for showing work logged column
+  const [showWorkLogged, setShowWorkLogged] = useState(false);
+  
   // Tooltip state for availability hover
   const [hoveredMember, setHoveredMember] = useState(null);
   
@@ -679,7 +682,16 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <h3 className="card-title mb-0">Team Capacity</h3>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={() => setShowWorkLogged(!showWorkLogged)}
+                className={`btn ${showWorkLogged ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '12px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                title={showWorkLogged ? 'Hide work logged column' : 'Show work logged column'}
+              >
+                <span style={{ fontSize: '11px' }}>📊</span>
+                Work Logged
+              </button>
               <button
                 onClick={expandAllMembers}
                 className="btn btn-secondary"
@@ -708,6 +720,9 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                   <th className="text-center" style={{ width: '80px' }} title="Number of issues assigned to this member">Issues</th>
                   <th className="text-center" style={{ width: '120px' }} title="Available working hours after leaves and holidays, adjusted by role allocation">Availability</th>
                   <th className="text-center" style={{ width: '140px' }} title="Total committed work = Remaining estimate + Work logged during this sprint (for non-late tickets)">Work Allocated</th>
+                  {showWorkLogged && (
+                    <th className="text-center" style={{ width: '120px' }} title="Total work logged by this member during this sprint">Work Logged</th>
+                  )}
                   <th className="text-center" style={{ width: '140px' }} title="Remaining capacity = Availability - Work Allocated. Negative means overcommitted.">Available Bandwidth</th>
                   <th style={{ width: '150px' }} title="Percentage of availability that is allocated to work">Utilization</th>
                 </tr>
@@ -807,6 +822,27 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                             </div>
                           ) : '-'}
                         </td>
+                        {showWorkLogged && (
+                          <td className="text-center" style={{ color: 'var(--accent-green)' }}>
+                            {(() => {
+                              // Calculate total work logged from all assigned issues for this member
+                              const totalWorkLogged = item.work.assignedIssues
+                                .filter(issue => !issue.isCompletedBeforeSprint)
+                                .reduce((sum, issue) => sum + (issue.workLogged || 0), 0);
+                              
+                              return totalWorkLogged > 0 ? (
+                                <div>
+                                  <span style={{ fontWeight: '600' }}>
+                                    {(totalWorkLogged / hoursPerDay).toFixed(1)}d
+                                  </span>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                                    ({formatHours(totalWorkLogged)})
+                                  </span>
+                                </div>
+                              ) : '-';
+                            })()}
+                          </td>
+                        )}
                         <td className="text-center">
                           {item.capacity ? (
                             <div className={item.capacity.remainingCapacity < 0 ? 'status-badge danger' : ''}>
@@ -837,7 +873,7 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                       </tr>
                       {isExpanded && item.work.assignedIssues.length > 0 && (
                         <tr>
-                          <td colSpan="6" style={{ padding: '0 12px 12px 24px', background: 'var(--bg-secondary)' }}>
+                          <td colSpan={showWorkLogged ? '7' : '6'} style={{ padding: '0 12px 12px 24px', background: 'var(--bg-secondary)' }}>
                             <table className="planning-table" style={{ marginTop: '8px', fontSize: '12px' }}>
                               <thead>
                                 <tr style={{ background: 'var(--bg-tertiary)' }}>
@@ -934,6 +970,29 @@ function SprintPlanning({ planningData, loading, error, sprint, onRefresh, jiraB
                       </div>
                     ) : '-'}
                   </td>
+                  {showWorkLogged && (
+                    <td className="text-center" style={{ color: 'var(--accent-green)' }}>
+                      {(() => {
+                        // Calculate total work logged from all issues across all members
+                        const totalWorkLogged = planning.members.reduce((sum, member) => {
+                          return sum + member.work.assignedIssues
+                            .filter(issue => !issue.isCompletedBeforeSprint)
+                            .reduce((memberSum, issue) => memberSum + (issue.workLogged || 0), 0);
+                        }, 0);
+                        
+                        return totalWorkLogged > 0 ? (
+                          <div>
+                            <span style={{ fontWeight: '600' }}>
+                              {(totalWorkLogged / hoursPerDay).toFixed(1)}d
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '4px' }}>
+                              ({formatHours(totalWorkLogged)})
+                            </span>
+                          </div>
+                        ) : '-';
+                      })()}
+                    </td>
+                  )}
                   <td className="text-center">
                     <div className={totals.totalRemaining < 0 ? 'status-badge danger' : ''}>
                       <span style={{ fontWeight: '600' }}>

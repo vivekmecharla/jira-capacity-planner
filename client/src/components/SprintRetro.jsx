@@ -4,10 +4,11 @@ import { format } from 'date-fns';
 import { jiraApi, configApi } from '../api';
 import IssuesTable from './IssuesTable';
 import MemberIssuesTable from './MemberIssuesTable';
+import MemberCapacityChart from './MemberCapacityChart';
 import LeavesModal from './LeavesModal';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList } from 'recharts';
 
-function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '', boardId = null }) {
+function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '', boardId = null, planningData = null }) {
   const [retroData, setRetroData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -464,6 +465,68 @@ function SprintRetro({ sprint, selectedBoard, jiraBaseUrl = '', boardId = null }
           )}
         </div>
       </div>
+
+      {/* Member Work Overview Chart */}
+      {filteredIssues.length > 0 && (() => {
+        // Build availability lookup from planningData (same source as Team Capacity table)
+        const availabilityByName = {};
+        if (planningData?.planning?.members) {
+          planningData.planning.members.forEach(item => {
+            const name = item.member.displayName;
+            if (name && item.member.accountId !== 'unassigned') {
+              availabilityByName[name] = item.availability?.allocatedHours ?? item.availability?.availableHours ?? 0;
+            }
+          });
+        }
+
+        // Build member work data from retro issues
+        const memberMap = {};
+        const allSubtasks = Object.values(filteredSubtasksByParent).flat();
+        const allItems = allSubtasks.length > 0 ? allSubtasks : filteredIssues;
+
+        allItems.forEach(issue => {
+          const name = issue.assignee || 'Unassigned';
+          if (!memberMap[name]) {
+            memberMap[name] = { name, availableHours: availabilityByName[name] || 0, workAllocated: 0, workLogged: 0 };
+          }
+          memberMap[name].workAllocated += issue.originalEstimate || 0;
+          memberMap[name].workLogged += issue.workLogged || 0;
+        });
+
+        // Also include parent issues that have no subtasks
+        if (allSubtasks.length > 0) {
+          const parentsWithSubtasks = new Set(Object.keys(filteredSubtasksByParent).filter(k => filteredSubtasksByParent[k].length > 0));
+          [...filteredTechStories, ...filteredProductionIssues].forEach(issue => {
+            if (!parentsWithSubtasks.has(issue.key)) {
+              const name = issue.assignee || 'Unassigned';
+              if (!memberMap[name]) {
+                memberMap[name] = { name, availableHours: availabilityByName[name] || 0, workAllocated: 0, workLogged: 0 };
+              }
+              memberMap[name].workAllocated += issue.originalEstimate || 0;
+              memberMap[name].workLogged += issue.workLogged || 0;
+            }
+          });
+        }
+
+        // Add members who have availability but no retro issues
+        Object.entries(availabilityByName).forEach(([name, hours]) => {
+          if (!memberMap[name]) {
+            memberMap[name] = { name, availableHours: hours, workAllocated: 0, workLogged: 0 };
+          }
+        });
+
+        const capacityMembers = Object.values(memberMap)
+          .filter(m => m.name !== 'Unassigned')
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        return capacityMembers.length > 0 ? (
+          <MemberCapacityChart
+            title="Member Work Overview"
+            members={capacityMembers}
+            hoursPerDay={hoursPerDay}
+          />
+        ) : null;
+      })()}
 
       {/* Tech Stories Section */}
       {filteredTechStories.length > 0 && (

@@ -32,6 +32,11 @@ A comprehensive sprint management tool that integrates with Jira to provide capa
 - **Overdue Analysis**: Track days overdue for incomplete tickets
 - **Completion Rates**: Percentage completion metrics per category
 - **Member-wise Breakdown**: Issues grouped by team member, then by parent story with subtasks
+- **Member Work Overview**: Visual bar charts showing team member capacity and work tracking
+  - **Team Summary Chart**: Vertical bar chart with member names on X-axis displaying available hours, work allocated, and work logged
+  - **Individual Breakdown**: Horizontal bar charts per member with collapsible details
+  - **Work Tracking Metrics**: Logged vs allocated percentage with color-coded progress indicators
+  - **Mutually Exclusive Views**: Switch between team summary and individual member views
 
 ### Issue Management
 - **Tech Stories Table**: Stories, Tasks, and Technical Tasks with Dev/QA estimate columns
@@ -152,6 +157,7 @@ Access the application:
 2. View the **Sprint Planning** tab for:
    - Team capacity pie charts (filtered by selected board)
    - Per-member capacity vs committed work (only members assigned to board)
+   - **Team Capacity table** with optional work logged column (toggle with "📊 Work Logged" button)
    - Tech Stories and Production Issues tables
 
 **Note**: When a board is selected, only team members assigned to that board are shown in capacity calculations and planning data.
@@ -176,6 +182,11 @@ Access the application:
 2. Review committed vs completed metrics
 3. Analyze late additions and overdue items
 4. **Member-wise Breakdown**: View all issues grouped by team member, then by parent story
+5. **Member Work Overview**: 
+   - View the vertical bar chart showing team-wide capacity and work allocation
+   - Switch to "Individual Breakdown" to see detailed per-member charts
+   - Review logged vs allocated percentages for each team member
+   - Expand individual member cards to see detailed work tracking
 
 ## Capacity Calculation
 
@@ -212,6 +223,12 @@ Subtasks are classified based on:
 | 🟢 Green | < 80% | Healthy capacity |
 | 🟡 Yellow | 80-100% | Near capacity |
 | 🔴 Red | > 100% | Overcommitted |
+
+| Color | Logged vs Allocated | Meaning |
+|-------|---------------------|---------|
+| 🟢 Green | ≥ 100% | Work completed or over |
+| 🟡 Yellow | 80-99% | Nearly completed |
+| 🔴 Red | < 80% | Significant gap in work logging |
 
 ## Data Storage
 
