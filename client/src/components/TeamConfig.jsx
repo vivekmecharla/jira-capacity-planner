@@ -94,12 +94,12 @@ function TeamConfig({ boards, selectedBoard }) {
         roleAllocation: 1
       });
       
-      // Load team members to get the newly added member data
-      await loadTeamMembers();
+      // Use response data directly to update state
+      const updatedMembers = response.data;
+      setTeamMembers(updatedMembers);
       
       // Find the newly added member and open edit modal
-      const newMember = response.data?.find(m => m.accountId === user.accountId) || 
-                        teamMembers.find(m => m.accountId === user.accountId);
+      const newMember = updatedMembers?.find(m => m.accountId === user.accountId);
       
       if (newMember) {
         setShowAddModal(false);
@@ -116,8 +116,8 @@ function TeamConfig({ boards, selectedBoard }) {
   const removeMember = async (accountId) => {
     if (window.confirm('Are you sure you want to remove this team member?')) {
       try {
-        await configApi.removeTeamMember(accountId);
-        loadTeamMembers();
+        const response = await configApi.removeTeamMember(accountId);
+        setTeamMembers(response.data);
       } catch (err) {
         console.error('Failed to remove team member:', err);
       }
@@ -126,8 +126,8 @@ function TeamConfig({ boards, selectedBoard }) {
 
   const updateMemberRole = async (accountId, role, roleAllocation) => {
     try {
-      await configApi.updateTeamMember(accountId, { role, roleAllocation });
-      loadTeamMembers();
+      const response = await configApi.updateTeamMember(accountId, { role, roleAllocation });
+      setTeamMembers(response.data);
     } catch (err) {
       console.error('Failed to update member role:', err);
     }
@@ -189,12 +189,12 @@ function TeamConfig({ boards, selectedBoard }) {
   const saveEditForm = async () => {
     if (!editingMember) return;
     try {
-      await configApi.updateTeamMember(editingMember.accountId, {
+      const response = await configApi.updateTeamMember(editingMember.accountId, {
         role: editForm.role,
         roleAllocation: editForm.roleAllocation,
         boardAssignments: editForm.boardAssignments
       });
-      loadTeamMembers();
+      setTeamMembers(response.data);
       closeEditModal();
     } catch (err) {
       console.error('Failed to update team member:', err);
@@ -300,8 +300,8 @@ function TeamConfig({ boards, selectedBoard }) {
         return memberData;
       });
 
-      await configApi.bulkAddTeamMembers(membersToAdd);
-      await loadTeamMembers();
+      const response = await configApi.bulkAddTeamMembers(membersToAdd);
+      setTeamMembers(response.data);
       setShowImportModal(false);
     } catch (err) {
       console.error('Import failed:', err);

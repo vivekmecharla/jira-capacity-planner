@@ -46,9 +46,10 @@ router.post('/team/bulk', (req, res) => {
 
 router.put('/team/:accountId', (req, res) => {
   try {
-    const member = database.updateTeamMember(req.params.accountId, req.body);
+    database.updateTeamMember(req.params.accountId, req.body);
+    const members = database.getTeamMembers();
     logger.info('Updated team member', { accountId: req.params.accountId });
-    res.json(member);
+    res.json(members);
   } catch (error) {
     logger.error('Error updating team member', { accountId: req.params.accountId, error: error.message });
     res.status(500).json({ error: error.message });
