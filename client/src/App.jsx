@@ -57,7 +57,7 @@ function App() {
     if (selectedSprint) {
       loadPlanningData(selectedSprint.id);
     }
-  }, [selectedSprint, selectedBoard]);
+  }, [selectedSprint]);
 
   const checkConnection = async () => {
     try {
@@ -272,6 +272,8 @@ function App() {
                   value={selectedBoard?.id || ''}
                   onChange={(e) => {
                     const board = boards.find(b => b.id === parseInt(e.target.value));
+                    setSelectedSprint(null);
+                    setPlanningData(null);
                     setSelectedBoard(board);
                   }}
                 >

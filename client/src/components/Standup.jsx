@@ -29,26 +29,8 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     fetchLeaves();
   }, []);
 
-  if (loading) {
-    return (
-      <div className="loading">
-        <div className="spinner"></div>
-        <p>Loading standup data...</p>
-      </div>
-    );
-  }
-
-  if (!planningData || !sprint || !planningData.planning) {
-    return (
-      <div className="card">
-        <div className="empty-state">
-          <p>Select a sprint to view standup board</p>
-        </div>
-      </div>
-    );
-  }
-
-  const { planning } = planningData;
+  // Get derived data safely
+  const planning = planningData?.planning;
   const members = planning?.members || [];
 
   // Get today's leaves
@@ -106,19 +88,6 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     return subtasksWithParentInfo.filter(subtask => subtask.assignee?.accountId === selectedMember);
   }, [subtasksWithParentInfo, selectedMember]);
 
-  // Toggle collapse state for a parent group
-  const toggleGroupCollapse = (parentKey) => {
-    setCollapsedGroups(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(parentKey)) {
-        newSet.delete(parentKey);
-      } else {
-        newSet.add(parentKey);
-      }
-      return newSet;
-    });
-  };
-
   // Group subtasks by parent and categorize by status into columns
   const parentGroups = useMemo(() => {
     const todoStatuses = ['To Do', 'Open', 'Backlog', 'New', 'Reopened'];
@@ -159,6 +128,38 @@ function Standup({ planningData, sprint, loading, jiraBaseUrl = '' }) {
 
     return groupedByParent;
   }, [filteredSubtasks]);
+
+  if (loading) {
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <p>Loading standup data...</p>
+      </div>
+    );
+  }
+
+  if (!planningData || !sprint || !planningData.planning) {
+    return (
+      <div className="card">
+        <div className="empty-state">
+          <p>Select a sprint to view standup board</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Toggle collapse state for a parent group
+  const toggleGroupCollapse = (parentKey) => {
+    setCollapsedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(parentKey)) {
+        newSet.delete(parentKey);
+      } else {
+        newSet.add(parentKey);
+      }
+      return newSet;
+    });
+  };
 
   const TimeTrackingBar = ({ logged, remaining, estimate }) => {
     const total = logged + remaining;

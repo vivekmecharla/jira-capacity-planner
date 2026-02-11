@@ -311,15 +311,6 @@ Subtasks are classified based on:
 - Members are already in your team configuration
 - Select different members or remove existing team members first
 
-## Known Issues
-
-
-### Sprint Selection & Refresh
-- **Page Crash**: Changing sprint while on tabs other than Sprint Planning/Active Sprints/Sprint Retro causes the page to crash
-- **Refresh Button**: Clicking refresh on tabs other than Sprint Planning causes the page to crash
-
-> **Note**: These issues are known and will be fixed in future updates. The Timeline component is marked as "Work in Progress" (WIP) to indicate its current state.
-
 ## License
 
 NA

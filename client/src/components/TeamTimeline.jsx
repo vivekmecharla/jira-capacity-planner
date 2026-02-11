@@ -30,71 +30,33 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
     fetchHolidaysAndLeaves();
   }, []);
 
-  // Check if a date is a holiday
-  const getHolidayForDate = (date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return holidays.find(h => h.date === dateStr);
-  };
-
-  // Check if a member has leave on a specific date
-  const getLeaveForMemberOnDate = (accountId, date) => {
-    const dateStart = startOfDay(date);
-    return leaves.find(leave => {
-      if (leave.accountId !== accountId) return false;
-      try {
-        const leaveStart = startOfDay(parseISO(leave.startDate));
-        const leaveEnd = startOfDay(parseISO(leave.endDate));
-        return isWithinInterval(dateStart, { start: leaveStart, end: leaveEnd });
-      } catch (e) {
-        return false;
-      }
-    });
-  };
-
-  // Check if member has leave on a date (for task breaking)
-  const hasLeaveOnDate = (accountId, date) => {
-    return !!getLeaveForMemberOnDate(accountId, date);
-  };
-
-  if (loading) {
-    return (
-      <div className="loading">
-        <div className="spinner"></div>
-        <p>Loading timeline data...</p>
-      </div>
-    );
-  }
-
-  if (!planningData || !sprint || !planningData.planning) {
-    return (
-      <div className="card">
-        <div className="empty-state">
-          <p>Select a sprint to view the team timeline</p>
-        </div>
-      </div>
-    );
-  }
-
-  const { planning } = planningData;
+  // Get derived data safely
+  const planning = planningData?.planning;
   const members = planning?.members || [];
 
   // Calculate sprint date range with error handling
-  let sprintStart, sprintEnd, sprintDays;
-  try {
-    sprintStart = sprint.startDate ? startOfDay(parseISO(sprint.startDate)) : new Date();
-    sprintEnd = sprint.endDate ? startOfDay(parseISO(sprint.endDate)) : addDays(sprintStart, 14);
-    sprintDays = differenceInDays(sprintEnd, sprintStart) + 1;
-    // Ensure sprintDays is reasonable
-    if (sprintDays <= 0 || sprintDays > 60) {
-      sprintDays = 14;
-      sprintEnd = addDays(sprintStart, 13);
+  const sprintDates = useMemo(() => {
+    try {
+      let sprintStart = sprint?.startDate ? startOfDay(parseISO(sprint.startDate)) : new Date();
+      let sprintEnd = sprint?.endDate ? startOfDay(parseISO(sprint.endDate)) : addDays(sprintStart, 14);
+      let sprintDays = differenceInDays(sprintEnd, sprintStart) + 1;
+      
+      // Ensure sprintDays is reasonable
+      if (sprintDays <= 0 || sprintDays > 60) {
+        sprintDays = 14;
+        sprintEnd = addDays(sprintStart, 13);
+      }
+      
+      return { sprintStart, sprintEnd, sprintDays };
+    } catch (err) {
+      console.error('Error parsing sprint dates:', err);
+      const sprintStart = new Date();
+      const sprintEnd = addDays(sprintStart, 13);
+      return { sprintStart, sprintEnd, sprintDays: 14 };
     }
-  } catch (err) {
-    console.error('Error parsing sprint dates:', err);
-    sprintStart = new Date();
-    sprintEnd = addDays(sprintStart, 13);
-    sprintDays = 14;
-  }
+  }, [sprint]);
+
+  const { sprintStart, sprintEnd, sprintDays } = sprintDates;
 
   // Generate array of dates for the timeline (excluding weekends)
   const timelineDates = useMemo(() => {
@@ -196,6 +158,49 @@ function TeamTimeline({ planningData, sprint, loading, jiraBaseUrl = '' }) {
       return [];
     }
   }, [members, sprintStart, sprintEnd, sprintDays]);
+
+  // Helper functions (move after hooks)
+  const getHolidayForDate = (date) => {
+    const dateStr = format(date, 'yyyy-MM-dd');
+    return holidays.find(h => h.date === dateStr);
+  };
+
+  const getLeaveForMemberOnDate = (accountId, date) => {
+    const dateStart = startOfDay(date);
+    return leaves.find(leave => {
+      if (leave.accountId !== accountId) return false;
+      try {
+        const leaveStart = startOfDay(parseISO(leave.startDate));
+        const leaveEnd = startOfDay(parseISO(leave.endDate));
+        return isWithinInterval(dateStart, { start: leaveStart, end: leaveEnd });
+      } catch (e) {
+        return false;
+      }
+    });
+  };
+
+  const hasLeaveOnDate = (accountId, date) => {
+    return !!getLeaveForMemberOnDate(accountId, date);
+  };
+
+  if (loading) {
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <p>Loading timeline data...</p>
+      </div>
+    );
+  }
+
+  if (!planningData || !sprint || !planningData.planning) {
+    return (
+      <div className="card">
+        <div className="empty-state">
+          <p>Select a sprint to view the team timeline</p>
+        </div>
+      </div>
+    );
+  }
 
   // Highly contrasting color palette for tasks - very distinct colors
   const TASK_COLORS = [
