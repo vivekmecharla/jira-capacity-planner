@@ -226,7 +226,7 @@ function App() {
       case 'team':
         return <TeamConfig boards={boards} selectedBoard={selectedBoard} />;
       case 'calendar':
-        return <HolidaysLeaves />;
+        return <HolidaysLeaves selectedBoard={selectedBoard} />;
       case 'settings':
         return <SettingsPanel />;
       default:

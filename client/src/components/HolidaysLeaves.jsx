@@ -4,7 +4,7 @@ import { configApi } from '../api';
 import { format } from 'date-fns';
 import LeavesModal from './LeavesModal';
 
-function HolidaysLeaves() {
+function HolidaysLeaves({ selectedBoard }) {
   const [holidays, setHolidays] = useState([]);
   const [leaves, setLeaves] = useState([]);
   const [teamMembers, setTeamMembers] = useState([]);
@@ -102,6 +102,24 @@ function HolidaysLeaves() {
     }
   };
 
+  // Filter team members based on selected board (same logic as TeamConfig)
+  const filteredTeamMembers = teamMembers.filter(member => {
+    if (!selectedBoard) return true;
+    
+    // If member has no board assignments, include them in all boards (backward compatible)
+    if (!member.boardAssignments || member.boardAssignments.length === 0) return true;
+    
+    return member.boardAssignments.some(ba => ba.boardId === selectedBoard.id);
+  });
+
+  // Filter leaves to show only leaves of filtered team members
+  const filteredLeaves = leaves.filter(leave => {
+    if (!selectedBoard) return true;
+    
+    // Check if the leave belongs to a team member assigned to the selected board
+    return filteredTeamMembers.some(member => member.accountId === leave.accountId);
+  });
+
   return (
     <>
       {/* Zoho Status Banner */}
@@ -190,8 +208,21 @@ function HolidaysLeaves() {
             <h3 className="card-title">
               <User size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
               Team Leaves
+              {selectedBoard && (
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '400', marginLeft: '8px' }}>
+                  (filtered by {selectedBoard.name})
+                </span>
+              )}
             </h3>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                {filteredLeaves.length} leaves
+                {selectedBoard && (
+                  <span style={{ marginLeft: '4px', color: 'var(--accent-blue)' }}>
+                    ({filteredTeamMembers.length} team members)
+                  </span>
+                )}
+              </span>
               <button className="btn btn-secondary btn-sm"
                 onClick={() => setShowManageLeavesModal(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
@@ -206,13 +237,22 @@ function HolidaysLeaves() {
             <div className="empty-state" style={{ padding: '40px 20px' }}>
               <p style={{ fontSize: '13px' }}>Loading leaves...</p>
             </div>
-          ) : leaves.length === 0 ? (
+          ) : filteredLeaves.length === 0 ? (
             <div className="empty-state" style={{ padding: '40px 20px' }}>
-              <p style={{ fontSize: '13px' }}>No leaves found</p>
+              <p style={{ fontSize: '13px' }}>
+                {selectedBoard 
+                  ? 'No leaves found for team members assigned to this board.'
+                  : 'No leaves found'}
+              </p>
+              {selectedBoard && (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                  Showing leaves for {filteredTeamMembers.length} team members assigned to "{selectedBoard.name}"
+                </p>
+              )}
             </div>
           ) : (
             <div className="leave-list">
-              {leaves
+              {filteredLeaves
                 .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
                 .map(leave => (
                   <div 
