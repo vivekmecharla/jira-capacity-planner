@@ -27,6 +27,7 @@ export const jiraApi = {
 
 // Config API
 export const configApi = {
+  bulkAddTeamMembers: (members) => api.post('/config/team/bulk', { members }),
   // Team
   getTeam: () => api.get('/config/team'),
   addTeamMember: (member) => api.post('/config/team', member),
@@ -63,6 +64,10 @@ export const capacityApi = {
   getBoardSummary: (boardId, state) => 
     api.get(`/capacity/board/${boardId}/summary`, { params: { state } })
 };
+
+// Jira Teams API
+jiraApi.getTeams = () => api.get('/jira/teams');
+jiraApi.getTeamMembers = (teamId) => api.get(`/jira/teams/${teamId}/members`);
 
 // Add retro API to jiraApi
 jiraApi.getSprintRetro = (sprintId, boardId = null) => 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, UserPlus, Search, Edit2 } from 'lucide-react';
+import { Plus, Trash2, UserPlus, Search, Edit2, Download, Users, CheckSquare, Square, Loader } from 'lucide-react';
 import { jiraApi, configApi } from '../api';
 
 function TeamConfig({ boards, selectedBoard }) {
@@ -13,6 +13,19 @@ function TeamConfig({ boards, selectedBoard }) {
   const [editForm, setEditForm] = useState({ role: 'Developer', roleAllocation: 1, boardAssignments: [] });
   const [allBoards, setAllBoards] = useState([]);
   const [boardSearchQuery, setBoardSearchQuery] = useState('');
+
+  // Import from Jira Team state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [jiraTeams, setJiraTeams] = useState([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [teamsError, setTeamsError] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [teamMembersPreview, setTeamMembersPreview] = useState([]);
+  const [teamMembersLoading, setTeamMembersLoading] = useState(false);
+  const [selectedImportMembers, setSelectedImportMembers] = useState({});
+  const [importBoardId, setImportBoardId] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importTeamSearch, setImportTeamSearch] = useState('');
 
   useEffect(() => {
     loadTeamMembers();
@@ -188,6 +201,121 @@ function TeamConfig({ boards, selectedBoard }) {
     }
   };
 
+  // --- Import from Jira Team functions ---
+  const openImportModal = async () => {
+    setShowImportModal(true);
+    setSelectedTeam(null);
+    setTeamMembersPreview([]);
+    setSelectedImportMembers({});
+    setImportBoardId(selectedBoard?.id || null);
+    setTeamsError(null);
+    setImportTeamSearch('');
+    await loadJiraTeams();
+  };
+
+  const loadJiraTeams = async () => {
+    setTeamsLoading(true);
+    setTeamsError(null);
+    try {
+      const response = await jiraApi.getTeams();
+      setJiraTeams(response.data || []);
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message;
+      setTeamsError(msg);
+      setJiraTeams([]);
+    } finally {
+      setTeamsLoading(false);
+    }
+  };
+
+  const selectTeamForImport = async (team) => {
+    setSelectedTeam(team);
+    setTeamMembersPreview([]);
+    setSelectedImportMembers({});
+    setTeamMembersLoading(true);
+    try {
+      const response = await jiraApi.getTeamMembers(team.teamId);
+      const members = response.data || [];
+      setTeamMembersPreview(members);
+      // Pre-select members not already in the team
+      const selections = {};
+      members.forEach(m => {
+        if (!teamMembers.some(tm => tm.accountId === m.accountId)) {
+          selections[m.accountId] = true;
+        }
+      });
+      setSelectedImportMembers(selections);
+    } catch (err) {
+      console.error('Failed to load team members:', err);
+    } finally {
+      setTeamMembersLoading(false);
+    }
+  };
+
+  const toggleImportMember = (accountId) => {
+    setSelectedImportMembers(prev => ({ ...prev, [accountId]: !prev[accountId] }));
+  };
+
+  const selectAllImportMembers = () => {
+    const selections = {};
+    teamMembersPreview.forEach(m => {
+      if (!teamMembers.some(tm => tm.accountId === m.accountId)) {
+        selections[m.accountId] = true;
+      }
+    });
+    setSelectedImportMembers(selections);
+  };
+
+  const deselectAllImportMembers = () => {
+    setSelectedImportMembers({});
+  };
+
+  const importSelectedMembers = async () => {
+    const toImport = teamMembersPreview.filter(m => selectedImportMembers[m.accountId]);
+    if (toImport.length === 0) return;
+
+    setImporting(true);
+    try {
+      const board = importBoardId ? allBoards.find(b => b.id === importBoardId) : null;
+
+      const membersToAdd = toImport.map(user => {
+        const memberData = {
+          accountId: user.accountId,
+          displayName: user.displayName,
+          emailAddress: user.emailAddress,
+          avatarUrl: user.avatarUrls?.['32x32'],
+          role: 'Developer',
+          roleAllocation: 1
+        };
+
+        if (board) {
+          memberData.boardAssignments = [{
+            boardId: board.id,
+            boardName: board.name,
+            projectKey: board.location?.projectKey || '',
+            projectName: board.location?.projectName || ''
+          }];
+        }
+
+        return memberData;
+      });
+
+      await configApi.bulkAddTeamMembers(membersToAdd);
+      await loadTeamMembers();
+      setShowImportModal(false);
+    } catch (err) {
+      console.error('Import failed:', err);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const filteredJiraTeams = jiraTeams.filter(t => {
+    if (!importTeamSearch.trim()) return true;
+    const q = importTeamSearch.toLowerCase();
+    return (t.displayName || '').toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q);
+  });
+
   const filteredUsers = jiraUsers.filter(user => 
     !teamMembers.some(m => m.accountId === user.accountId) &&
     (user.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -214,10 +342,16 @@ function TeamConfig({ boards, selectedBoard }) {
               </span>
             )}
           </h3>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            <UserPlus size={16} />
-            Add Member
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-secondary" onClick={openImportModal}>
+              <Download size={16} />
+              Import from Jira Team
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+              <UserPlus size={16} />
+              Add Member
+            </button>
+          </div>
         </div>
 
         {filteredTeamMembers.length === 0 ? (
@@ -517,6 +651,230 @@ function TeamConfig({ boards, selectedBoard }) {
                     <Plus size={16} style={{ color: 'var(--accent-green)' }} />
                   </div>
                 ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Import from Jira Team Modal */}
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => !importing && setShowImportModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h3 className="modal-title">
+                <Users size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                Import from Jira Team
+              </h3>
+              <button className="modal-close" onClick={() => !importing && setShowImportModal(false)}>×</button>
+            </div>
+
+            <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Error message */}
+              {teamsError && (
+                <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', fontSize: '13px', color: 'var(--accent-red)' }}>
+                  {teamsError}
+                </div>
+              )}
+
+              {/* Team selector */}
+              {!selectedTeam ? (
+                <>
+                  <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                    Select a Jira Team to import members from:
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Search teams..."
+                      value={importTeamSearch}
+                      onChange={(e) => setImportTeamSearch(e.target.value)}
+                      style={{ paddingLeft: '36px' }}
+                    />
+                  </div>
+
+                  {teamsLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '24px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      <Loader size={16} className="spin" /> Loading teams...
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: '350px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {filteredJiraTeams.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                          {jiraTeams.length === 0 ? 'No teams found in your organization.' : 'No teams match your search.'}
+                        </div>
+                      ) : (
+                        filteredJiraTeams.map(team => (
+                          <div
+                            key={team.teamId}
+                            onClick={() => selectTeamForImport(team)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '12px',
+                              borderRadius: '8px',
+                              cursor: 'pointer',
+                              background: 'var(--bg-tertiary)',
+                              border: '1px solid var(--border-color)',
+                              transition: 'all 0.15s ease'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-blue)'; e.currentTarget.style.background = 'rgba(59, 130, 246, 0.06)'; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.background = 'var(--bg-tertiary)'; }}
+                          >
+                            <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Users size={18} style={{ color: 'var(--accent-blue)' }} />
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-primary)' }}>{team.displayName}</div>
+                              {team.description && (
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{team.description}</div>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: team.state === 'ACTIVE' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(156, 163, 175, 0.15)', color: team.state === 'ACTIVE' ? 'var(--accent-green)' : 'var(--text-muted)', fontWeight: '600' }}>
+                              {team.state || 'ACTIVE'}
+                            </span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Selected team header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Users size={18} style={{ color: 'var(--accent-blue)' }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{selectedTeam.displayName}</div>
+                      {selectedTeam.description && (
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{selectedTeam.description}</div>
+                      )}
+                    </div>
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => { setSelectedTeam(null); setTeamMembersPreview([]); setSelectedImportMembers({}); }}
+                      style={{ fontSize: '11px', padding: '4px 8px' }}
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  {/* Board auto-assignment */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '12px' }}>Auto-assign to board (optional)</label>
+                    <select
+                      className="select"
+                      value={importBoardId || ''}
+                      onChange={(e) => setImportBoardId(e.target.value ? parseInt(e.target.value) : null)}
+                      style={{ fontSize: '12px' }}
+                    >
+                      <option value="">No board assignment</option>
+                      {allBoards.map(board => (
+                        <option key={board.id} value={board.id}>
+                          {board.name}{board.location?.projectName ? ` (${board.location.projectName})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Members preview */}
+                  {teamMembersLoading ? (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '24px', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      <Loader size={16} className="spin" /> Loading team members...
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '600' }}>
+                          Members ({teamMembersPreview.length})
+                          {Object.values(selectedImportMembers).filter(Boolean).length > 0 && (
+                            <span style={{ color: 'var(--accent-blue)', marginLeft: '4px' }}>
+                              — {Object.values(selectedImportMembers).filter(Boolean).length} selected
+                            </span>
+                          )}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button onClick={selectAllImportMembers} className="btn btn-secondary" style={{ fontSize: '10px', padding: '2px 6px' }}>Select All</button>
+                          <button onClick={deselectAllImportMembers} className="btn btn-secondary" style={{ fontSize: '10px', padding: '2px 6px' }}>Deselect All</button>
+                        </div>
+                      </div>
+
+                      <div style={{ maxHeight: '250px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {teamMembersPreview.map(member => {
+                          const alreadyAdded = teamMembers.some(tm => tm.accountId === member.accountId);
+                          const isSelected = selectedImportMembers[member.accountId];
+                          return (
+                            <label
+                              key={member.accountId}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                borderRadius: '6px',
+                                cursor: alreadyAdded ? 'default' : 'pointer',
+                                fontSize: '13px',
+                                background: alreadyAdded ? 'var(--bg-tertiary)' : isSelected ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-secondary)',
+                                border: alreadyAdded ? '1px solid var(--border-color)' : isSelected ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid var(--border-color)',
+                                opacity: alreadyAdded ? 0.6 : 1,
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              {alreadyAdded ? (
+                                <CheckSquare size={16} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={!!isSelected}
+                                  onChange={() => toggleImportMember(member.accountId)}
+                                  style={{ margin: 0, flexShrink: 0 }}
+                                />
+                              )}
+                              <div className="avatar" style={{ width: '28px', height: '28px', fontSize: '12px', lineHeight: '28px', flexShrink: 0 }}>
+                                {member.displayName?.charAt(0)?.toUpperCase() || '?'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: '500', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {member.displayName}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                  {member.emailAddress || ''}
+                                </div>
+                              </div>
+                              {alreadyAdded && (
+                                <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '4px', background: 'rgba(34, 197, 94, 0.15)', color: 'var(--accent-green)', fontWeight: '600', flexShrink: 0 }}>
+                                  Already added
+                                </span>
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Import button */}
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                    <button className="btn btn-secondary" onClick={() => !importing && setShowImportModal(false)} disabled={importing}>Cancel</button>
+                    <button
+                      className="btn btn-primary"
+                      onClick={importSelectedMembers}
+                      disabled={importing || Object.values(selectedImportMembers).filter(Boolean).length === 0}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      {importing ? (
+                        <><Loader size={14} className="spin" /> Importing...</>
+                      ) : (
+                        <><Download size={14} /> Import {Object.values(selectedImportMembers).filter(Boolean).length} Member{Object.values(selectedImportMembers).filter(Boolean).length !== 1 ? 's' : ''}</>
+                      )}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>

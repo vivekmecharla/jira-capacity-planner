@@ -48,6 +48,7 @@ A comprehensive sprint management tool that integrates with Jira to provide capa
 ### Team & Configuration
 - **Team Member Management**: Add/remove team members with role assignments (Developer, QA, Dev Lead, QA Lead, Sprint Head)
 - **Board Assignments**: Assign team members to specific boards/projects for filtered capacity planning
+- **Import from Jira Team**: Import team members directly from Jira Teams feature with member selection and auto board assignment
 - **Board-Based Filtering**: View only team members assigned to the selected board across all features
 - **Holiday Calendar**: Configure company-wide holidays
 - **Leave Management**: Track individual team member leaves with sorting and editing capabilities
@@ -93,6 +94,7 @@ Edit `.env` with your Jira credentials:
 JIRA_BASE_URL=https://your-domain.atlassian.net
 JIRA_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your-api-token
+ATLASSIAN_ORG_ID=your-atlassian-org-id
 PORT=3001
 ```
 
@@ -103,9 +105,18 @@ PORT=3001
 3. Name it (e.g., "Capacity Planner")
 4. Copy the token to your `.env` file
 
-> **Security Note**: For read-only access, create a dedicated Jira user with only "Browse Projects" permission.
+### 4. Get Your Atlassian Organization ID (for Team Import)
 
-### 4. Run the Application
+1. Go to [Atlassian Admin](https://admin.atlassian.com) or [Atlassian Home](https://home.atlassian.com)
+2. Select your organization
+3. The organization ID is the UUID in the URL
+   - Example URL: `https://admin.atlassian.com/o/a1b2c3d4-e5f6-7890-abcd-ef1234567890/overview`
+   - The org ID is: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+4. If admin.atlassian.com redirects to create organization, try home.atlassian.com instead
+
+> **Required for Team Import**: This is only needed if you want to import team members from Jira Teams. Skip if you don't use this feature.
+
+### 5. Run the Application
 
 **Development mode:**
 ```bash
@@ -140,6 +151,8 @@ Access the application:
    - Add team members from your Jira project
    - Assign roles (Developer, QA, Dev Lead, QA Lead, Sprint Head)
    - **Assign team members to specific boards** for filtered capacity planning
+   - **Import from Jira Team**: Use the "Import from Jira Team" button to bulk import team members from Jira Teams
+     - Select a team, choose members to import, and optionally assign them to the current board
    - Use the Edit button to assign members to multiple boards/projects
 
 2. **Add Holidays** (Holidays & Leaves tab)
@@ -242,6 +255,8 @@ Subtasks are classified based on:
 - `GET /api/jira/boards` - List all boards
 - `GET /api/jira/boards/:id/sprints` - Get sprints for a board
 - `GET /api/jira/sprints/:id/issues` - Get issues in a sprint
+- `GET /api/jira/teams` - List all Jira Teams (requires ATLASSIAN_ORG_ID)
+- `GET /api/jira/teams/:teamId/members` - Get members of a Jira Team (requires ATLASSIAN_ORG_ID)
 
 ### Configuration
 - `GET/POST /api/config/team` - Team members
@@ -281,6 +296,20 @@ Subtasks are classified based on:
 
 ### Standup board empty
 - Ensure the sprint has subtasks assigned to team members
+
+### "ATLASSIAN_ORG_ID is not configured"
+- Add your Atlassian Organization ID to the `.env` file
+- See Installation section for instructions on finding your org ID
+- This is required for the "Import from Jira Team" feature
+
+### "No teams found in your organization"
+- Verify ATLASSIAN_ORG_ID is correct in your `.env` file
+- Ensure you have access to Jira Teams in your organization
+- Check that teams exist in your Atlassian organization
+
+### Team import shows "Already added" for all members
+- Members are already in your team configuration
+- Select different members or remove existing team members first
 
 ## Known Issues
 

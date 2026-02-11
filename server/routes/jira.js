@@ -222,4 +222,53 @@ router.get('/users/:accountId/worklogs', async (req, res) => {
   }
 });
 
+// Get Jira Teams (requires ATLASSIAN_ORG_ID)
+router.get('/teams', async (req, res) => {
+  try {
+    const teams = await jiraClient.getTeams();
+    logger.info('Fetched Jira teams', { count: teams.length });
+    res.json(teams);
+  } catch (error) {
+    logger.error('Error fetching Jira teams', { error: error.message, status: error.response?.status });
+    const status = error.message.includes('not configured') ? 400 : (error.response?.status || 500);
+    res.status(status).json({ error: error.message });
+  }
+});
+
+// Get members of a Jira Team (with resolved user profiles)
+router.get('/teams/:teamId/members', async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const rawMembers = await jiraClient.getTeamMembers(teamId);
+
+    // Extract accountIds from team members - handle both formats:
+    // 1. Array of objects with accountId property: [{accountId: "xxx"}]
+    // 2. Array of accountId strings: ["xxx"]
+    const accountIds = rawMembers
+      .map(m => typeof m === 'string' ? m : m.accountId)
+      .filter(Boolean);
+
+    logger.info('Fetched Jira team members', {
+      teamId,
+      rawMembersCount: rawMembers.length,
+      accountIdsCount: accountIds.length,
+      rawMembersSample: rawMembers.slice(0, 3)
+    });
+
+    // Resolve full user profiles from Jira
+    const profiles = await jiraClient.resolveTeamMemberProfiles(accountIds);
+
+    logger.info('Resolved Jira team member profiles', {
+      teamId,
+      resolvedCount: profiles.length
+    });
+
+    res.json(profiles);
+  } catch (error) {
+    logger.error('Error fetching Jira team members', { teamId: req.params.teamId, error: error.message, status: error.response?.status });
+    const status = error.message.includes('not configured') ? 400 : (error.response?.status || 500);
+    res.status(status).json({ error: error.message });
+  }
+});
+
 module.exports = router;

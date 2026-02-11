@@ -325,6 +325,116 @@ class JiraClient {
     return workLogs;
   }
 
+  // --- Jira Teams API (uses api.atlassian.com, requires ATLASSIAN_ORG_ID) ---
+
+  getTeamsClient() {
+    const authString = Buffer.from(`${this.email}:${this.apiToken}`).toString('base64');
+    return axios.create({
+      baseURL: 'https://api.atlassian.com',
+      headers: {
+        'Authorization': `Basic ${authString}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+  }
+
+  getOrgId() {
+    return (process.env.ATLASSIAN_ORG_ID || '').replace(/^['"]|['"]$/g, '');
+  }
+
+  async getTeams() {
+    const orgId = this.getOrgId();
+    if (!orgId) {
+      throw new Error('ATLASSIAN_ORG_ID is not configured. Set it in your .env file to use Jira Teams import.');
+    }
+
+    const client = this.getTeamsClient();
+    let allTeams = [];
+    let cursor = null;
+
+    do {
+      const params = { first: 50 };
+      if (cursor) params.cursor = cursor;
+
+      const response = await client.get(`/public/teams/v1/org/${orgId}/teams`, { params });
+      const data = response.data;
+      allTeams = allTeams.concat(data.entities || []);
+      cursor = data.cursor || null;
+    } while (cursor);
+
+    return allTeams;
+  }
+
+  async getTeamMembers(teamId) {
+    const orgId = this.getOrgId();
+    if (!orgId) {
+      throw new Error('ATLASSIAN_ORG_ID is not configured. Set it in your .env file to use Jira Teams import.');
+    }
+
+    console.log(`[JiraTeams] Fetching members for team ${teamId} in org ${orgId}`);
+
+    const client = this.getTeamsClient();
+    let allMembers = [];
+    let cursor = null;
+
+    try {
+      do {
+        const body = { first: 50 };
+        if (cursor) body.cursor = cursor;
+
+        console.log(`[JiraTeams] Making API call: POST /public/teams/v1/org/${orgId}/teams/${teamId}/members`, { body });
+
+        const response = await client.post(
+          `/public/teams/v1/org/${orgId}/teams/${teamId}/members`,
+          body
+        );
+
+        console.log(`[JiraTeams] API Response status: ${response.status}`);
+        console.log(`[JiraTeams] API Response data:`, JSON.stringify(response.data, null, 2));
+
+        const data = response.data;
+        const members = data.results || [];  // API returns data in 'results' array, not 'entities'
+        console.log(`[JiraTeams] Found ${members.length} members in this page`);
+
+        allMembers = allMembers.concat(members);
+        cursor = data.pageInfo?.hasNextPage ? data.pageInfo?.endCursor : null;  // Only continue if hasNextPage is true
+        console.log(`[JiraTeams] Next cursor: ${cursor}`);
+
+      } while (cursor);
+
+      console.log(`[JiraTeams] Total members found: ${allMembers.length}`);
+      return allMembers;
+
+    } catch (error) {
+      console.error(`[JiraTeams] Error fetching team members:`, error.message);
+      if (error.response) {
+        console.error(`[JiraTeams] Response status: ${error.response.status}`);
+        console.error(`[JiraTeams] Response data:`, error.response.data);
+      }
+      throw error;
+    }
+  }
+
+  async resolveTeamMemberProfiles(memberAccountIds) {
+    // The Teams API returns accountIds. We need to resolve display names via Jira user API.
+    const client = this.getClient();
+    const profiles = [];
+
+    for (const accountId of memberAccountIds) {
+      try {
+        const response = await client.get(`/rest/api/3/user`, {
+          params: { accountId }
+        });
+        profiles.push(response.data);
+      } catch (err) {
+        console.error(`Could not resolve user profile for ${accountId}:`, err.message);
+      }
+    }
+
+    return profiles;
+  }
+
   getLastWorkingDay(fromDate = new Date()) {
     const date = new Date(fromDate);
     date.setDate(date.getDate() - 1); // Start from yesterday

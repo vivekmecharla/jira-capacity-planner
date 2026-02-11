@@ -56,6 +56,25 @@ function addTeamMember(member) {
   return db.teamMembers;
 }
 
+function bulkAddTeamMembers(members) {
+  const db = readDb();
+  let counter = 0;
+  for (const member of members) {
+    const existing = db.teamMembers.find(m => m.accountId === member.accountId);
+    if (existing) {
+      Object.assign(existing, member);
+    } else {
+      db.teamMembers.push({
+        ...member,
+        id: `${Date.now()}_${counter++}`,
+        createdAt: new Date().toISOString()
+      });
+    }
+  }
+  writeDb(db);
+  return db.teamMembers;
+}
+
 function updateTeamMember(accountId, updates) {
   const db = readDb();
   const member = db.teamMembers.find(m => m.accountId === accountId);
@@ -159,6 +178,7 @@ function saveBoard(board) {
 module.exports = {
   getTeamMembers,
   addTeamMember,
+  bulkAddTeamMembers,
   updateTeamMember,
   removeTeamMember,
   getHolidays,

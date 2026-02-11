@@ -29,6 +29,21 @@ router.post('/team', (req, res) => {
   }
 });
 
+router.post('/team/bulk', (req, res) => {
+  try {
+    const { members } = req.body;
+    if (!Array.isArray(members) || members.length === 0) {
+      return res.status(400).json({ error: 'members array is required' });
+    }
+    const allMembers = database.bulkAddTeamMembers(members);
+    logger.info('Bulk added team members', { count: members.length });
+    res.json(allMembers);
+  } catch (error) {
+    logger.error('Error bulk adding team members', { error: error.message });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.put('/team/:accountId', (req, res) => {
   try {
     const member = database.updateTeamMember(req.params.accountId, req.body);
