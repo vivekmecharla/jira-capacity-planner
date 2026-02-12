@@ -16,6 +16,7 @@ const formatDate = (dateString) => {
 
 const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
   const [formData, setFormData] = useState({
+    accountId: leave?.accountId || '',
     memberName: leave?.memberName || '',
     startDate: leave?.startDate || new Date().toISOString().split('T')[0],
     endDate: leave?.endDate || new Date().toISOString().split('T')[0],
@@ -24,6 +25,16 @@ const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
     isUnplanned: leave?.isUnplanned || false,
     reason: leave?.reason || ''
   });
+
+  // Backfill accountId for legacy leaves that may have only stored memberName
+  useEffect(() => {
+    if (!formData.accountId && formData.memberName && teamMembers.length) {
+      const matchedMember = teamMembers.find(m => m.displayName === formData.memberName);
+      if (matchedMember) {
+        setFormData(prev => ({ ...prev, accountId: matchedMember.accountId }));
+      }
+    }
+  }, [formData.accountId, formData.memberName, teamMembers]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -37,8 +48,15 @@ const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
           Team Member
         </label>
         <select
-          value={formData.memberName}
-          onChange={(e) => setFormData({ ...formData, memberName: e.target.value })}
+          value={formData.accountId}
+          onChange={(e) => {
+            const selected = teamMembers.find(member => member.accountId === e.target.value);
+            setFormData({
+              ...formData,
+              accountId: e.target.value,
+              memberName: selected?.displayName || ''
+            });
+          }}
           required
           style={{
             width: '100%',
@@ -52,7 +70,7 @@ const LeaveForm = ({ leave, onSave, onCancel, teamMembers }) => {
         >
           <option value="">Select team member</option>
           {teamMembers.map(member => (
-            <option key={member.accountId} value={member.displayName}>
+            <option key={member.accountId} value={member.accountId}>
               {member.displayName}
             </option>
           ))}
